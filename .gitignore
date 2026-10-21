@@ -1,0 +1,25 @@
+# 依赖 / 缓存
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+
+# 备份文件（install.ps1 会在 profile 目录产生，但这里兜底）
+*.bak
+*.bak-*
+*.v1-*
+
+# 本机配置（含个人路径，不应入库）
+dsh-cascadeur.config.json
+*.local.json
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 导出产物
+casc_out/
+*.blend1
