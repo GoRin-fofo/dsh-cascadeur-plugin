@@ -14,16 +14,26 @@
 
 | 项 | 要求 |
 |---|---|
-| Cascadeur | 任意版本（含免费版）；需要**手动开一次**脚本服务器 |
+| Cascadeur | 任意版本（含免费版）；需要开脚本服务器（可自动化，见下） |
 | Blender | 5.x（Python 需带 `zstandard`；5.4 已自带） |
 | 原版模型 FBX | 当初导入 Cascadeur 用的那个 FBX（**不要用改过的**） |
 | DSH | 0.1.7+ |
 
-### 开 Cascadeur 脚本服务器（唯一的手动步骤）
+### 开 Cascadeur 脚本服务器
+
+**方式 A（手动，最快）**
 
 Cascadeur 菜单栏 → **Scripts** → **MCP** → **Start script server**
 
-开一次就行，插件每次导出都会用它。没开的话工具会明确提示你去开。
+**方式 B（自动，一次配置永久生效）**
+
+把 [`cascadeur_autostart/autostart.py`](cascadeur_autostart/) 复制到
+`<Cascadeur安装目录>\resources\scripts\python\scripts\mcp\`，
+之后每次启动 Cascadeur 都会自动开 8765（约 60 秒后就绪）。
+
+详见 [cascadeur_autostart/README.md](cascadeur_autostart/README.md)。
+
+> 没开的话工具会明确提示你怎么开。
 
 ---
 

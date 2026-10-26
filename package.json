@@ -1,26 +1,46 @@
 {
   "name": "@dsh-external/dsh-cascadeur-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "把 Cascadeur 的 .casc 动画搬进 Blender / UE5：通过官方 MCP 脚本服务器读取 Global Matrix，在 Blender 里重建并导出 FBX（逐顶点误差 0.000 cm）。",
   "private": false,
-  "keywords": ["dsh", "cascadeur", "blender", "ue5", "animation", "fbx"],
-  "engines": { "node": ">=20" },
+  "keywords": [
+    "dsh",
+    "cascadeur",
+    "blender",
+    "ue5",
+    "animation",
+    "fbx"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "main": "./lib/index.js",
-  "files": ["lib", "runtime", "cordis.patch.yml", "README.md"],
+  "files": [
+    "lib",
+    "runtime",
+    "cordis.patch.yml",
+    "README.md"
+  ],
   "license": "MIT",
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" }
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-tools": ">=0.0.1-rc <2",
     "cordis": ">=4.0.0-rc <5"
   },
   "peerDependenciesMeta": {
-    "cordis": { "optional": true }
+    "cordis": {
+      "optional": true
+    }
   },
   "exports": {
-    ".": { "default": "./lib/index.js" },
+    ".": {
+      "default": "./lib/index.js"
+    },
     "./package.json": "./package.json"
   }
 }
