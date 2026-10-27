@@ -1,6 +1,6 @@
 {
   "name": "@dsh-external/dsh-cascadeur-plugin",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "把 Cascadeur 的 .casc 动画搬进 Blender / UE5：通过官方 MCP 脚本服务器读取 Global Matrix，在 Blender 里重建并导出 FBX（逐顶点误差 0.000 cm）。",
   "private": false,
   "keywords": [

@@ -138,8 +138,11 @@ def parse_meshes(scene_json):
         beh = next((b for b in o.get("behaviours", []) if b.get("type") == "MeshObject"), None)
         if beh is None:
             continue
-        mesh_asset = assets.get(beh.get("mesh"))
+        mesh_asset = assets.get((beh.get("mesh") or "").strip()) if beh.get("mesh") else None
         dep_asset = assets.get(beh.get("mesh_dependency"))
+        # 视频对象等没有几何数据；两种存储格式：旧 = base64 "mesh"，新 = 明文 "vertices"
+        if mesh_asset is None or ("mesh" not in mesh_asset and "vertices" not in mesh_asset):
+            continue
         info = {
             "object": o.get("name"),
             "mesh_id": beh.get("mesh"),
@@ -150,7 +153,8 @@ def parse_meshes(scene_json):
             "verts_data": None,
             "weights": None,
         }
-        if mesh_asset is not None:
+        if "mesh" in mesh_asset:
+            # ── 旧格式：base64 二进制块 ──
             raw = base64.b64decode(mesh_asset["mesh"])
             ver, count = struct.unpack_from("<II", raw, 0)
             info["verts"] = count
@@ -159,7 +163,25 @@ def parse_meshes(scene_json):
             info["extra_bytes"] = rest
             info["verts_data"] = np.frombuffer(raw, dtype=np.float32, count=count * 4, offset=8) \
                 .reshape(count, 4)[:, 1:4].astype(np.float64)
-        if dep_asset is not None:
+        else:
+            # ── 新格式：明文数组 ──
+            def _num(x):
+                while isinstance(x, list):
+                    if not x:
+                        return 0.0
+                    x = x[0]
+                return float(x)
+
+            verts = mesh_asset.get("vertices") or []
+            info["verts"] = len(verts)
+            try:
+                info["verts_data"] = np.array(
+                    [[_num(v[0]), _num(v[1]), _num(v[2])] for v in verts], dtype=np.float64)
+            except Exception:
+                info["verts_data"] = None
+            tris = mesh_asset.get("triangles_vertex_indices") or []
+            info["tris"] = len(tris) // 3
+        if dep_asset is not None and "dependency" in dep_asset:
             raw = base64.b64decode(dep_asset["dependency"])
             nv, _ = struct.unpack_from("<II", raw, 0)
             pos = 8

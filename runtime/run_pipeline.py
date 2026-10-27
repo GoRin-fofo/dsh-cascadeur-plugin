@@ -176,7 +176,37 @@ def load_model_fbx(path):
     return arm, meshes
 
 
-def rebuild(casc, gm_path, model_fbx, lod_spec, fbx_out=None, blend_out=None):
+def iter_action_fcurves(act):
+    """Blender 4.4+ 的 slotted action 兼容层。"""
+    try:
+        legacy = list(act.fcurves)
+        if legacy:
+            return legacy
+    except Exception:
+        pass
+    out = []
+    for layer in getattr(act, "layers", []):
+        for strip in getattr(layer, "strips", []):
+            bags = []
+            try:
+                bags = list(strip.channelbags)
+            except Exception:
+                bags = []
+            if not bags:
+                for slot in getattr(act, "slots", []):
+                    try:
+                        cb = strip.channelbag(slot)
+                    except Exception:
+                        cb = None
+                    if cb is not None:
+                        bags.append(cb)
+            for cb in bags:
+                out.extend(list(cb.fcurves))
+    return out
+
+
+def rebuild(casc, gm_path, model_fbx, lod_spec, fbx_out=None, blend_out=None,
+            use_reduce=False, key_threshold=1.5, fps=30):
     js = casc_core.load_scene_json(casc)
     model = casc_core.load_model_pose(js)
     gm = json.load(open(gm_path, encoding="utf-8"))
@@ -207,10 +237,26 @@ def rebuild(casc, gm_path, model_fbx, lod_spec, fbx_out=None, blend_out=None):
     frame_keys = sorted(int(f) for f in gm.keys())
     sc.frame_start = frame_keys[0]
     sc.frame_end = frame_keys[-1]
-    sc.render.fps = 30
+    sc.render.fps = int(fps)
     sc.render.fps_base = 1.0
 
-    for fr in frame_keys:
+    # ── 关键帧简化 ──
+    write_frames = frame_keys
+    reduce_stats = None
+    if use_reduce:
+        import keyreduce
+        try:
+            write_frames, reduce_stats = keyreduce.reduce_keys(gm, threshold_deg=float(key_threshold))
+            err = keyreduce.reconstruction_error(gm, write_frames)
+            reduce_stats.update({"mean_err_deg": err["mean"], "max_err_deg": err["max"]})
+            print("keyreduce: %d -> %d frames (threshold %.2f deg)" % (
+                reduce_stats["dense"], reduce_stats["keys"], float(key_threshold)), flush=True)
+        except Exception as exc:
+            print("keyreduce failed, falling back to dense keys:", repr(exc), flush=True)
+            write_frames = frame_keys
+            reduce_stats = {"error": str(exc)}
+
+    for fr in write_frames:
         sc.frame_set(fr)
         casc_core.apply_pose(arm, gm[str(fr)], W_rest, order)
         bpy.context.view_layer.update()
@@ -220,6 +266,20 @@ def rebuild(casc, gm_path, model_fbx, lod_spec, fbx_out=None, blend_out=None):
                 continue
             pb.keyframe_insert("rotation_quaternion", frame=fr)
             pb.keyframe_insert("location", frame=fr)
+
+    # 简化模式下设为 Bezier（AUTO_CLAMPED，不过冲）
+    if use_reduce and reduce_stats and "error" not in reduce_stats:
+        n_fc = 0
+        for act in bpy.data.actions:
+            for fc in iter_action_fcurves(act):
+                for kp in fc.keyframe_points:
+                    kp.interpolation = 'BEZIER'
+                    kp.handle_left_type = 'AUTO_CLAMPED'
+                    kp.handle_right_type = 'AUTO_CLAMPED'
+                fc.update()
+                n_fc += 1
+        reduce_stats["bezier_fcurves"] = n_fc
+        print("set BEZIER on %d fcurves" % n_fc, flush=True)
 
     # 校验骨骼位置 vs API
     sc.frame_set(frame_keys[0])
@@ -238,6 +298,10 @@ def rebuild(casc, gm_path, model_fbx, lod_spec, fbx_out=None, blend_out=None):
                   rest_err_cm=float(rest_err.mean()) if len(rest_err) else None,
                   bone_pos_err_cm=float(np.mean(pos_err)) if pos_err else None,
                   bone_pos_err_max_cm=float(np.max(pos_err)) if pos_err else None)
+    if reduce_stats is not None:
+        result["reduce"] = reduce_stats
+        result["keyframes"] = (len(write_frames) if "error" not in reduce_stats else len(frame_keys))
+        result["interpolation"] = "BEZIER(AUTO_CLAMPED)" if "error" not in reduce_stats else "default"
 
     if blend_out:
         bpy.ops.wm.save_as_mainfile(filepath=blend_out)
@@ -271,7 +335,10 @@ def mode_blend():
         # mode_dump 里 emit 过一次，这里继续（JS 侧以最后一次为准）
     model_fbx = ARGS["model_fbx"]
     blend_out = ARGS["blend_out"]
-    r = rebuild(casc, gm, model_fbx, ARGS.get("lod", "0"), blend_out=blend_out)
+    r = rebuild(casc, gm, model_fbx, ARGS.get("lod", "0"), blend_out=blend_out,
+                use_reduce=(ARGS.get("reduce_keys", "false").lower() in ("1", "true", "yes")),
+                key_threshold=float(ARGS.get("key_threshold", 1.5)),
+                fps=int(ARGS.get("fps", 30)))
     r["mode"] = "blend"
     emit(**r)
 
@@ -283,7 +350,10 @@ def mode_export():
         mode_dump()
     model_fbx = ARGS["model_fbx"]
     fbx_out = ARGS["fbx_out"]
-    r = rebuild(casc, gm, model_fbx, ARGS.get("lod", "0"), fbx_out=fbx_out)
+    r = rebuild(casc, gm, model_fbx, ARGS.get("lod", "0"), fbx_out=fbx_out,
+                use_reduce=(ARGS.get("reduce_keys", "false").lower() in ("1", "true", "yes")),
+                key_threshold=float(ARGS.get("key_threshold", 1.5)),
+                fps=int(ARGS.get("fps", 30)))
     r["mode"] = "export"
     emit(**r)
 

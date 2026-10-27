@@ -1,5 +1,33 @@
 # 变更记录
 
+## v0.3.0 — 2026-10-27
+
+### 新增
+
+- **关键帧简化**（`runtime/keyreduce.py`）
+  - 误差驱动：反复挑"用相邻关键帧插值后误差最大"的帧，直到全帧误差 ≤ 阈值
+  - `casc2blend` / `casc2fbx` 新增参数 `reduce_keys`、`key_threshold`
+  - 设置项新增 `reduceKeys` / `keyThreshold` / `fps`
+  - 简化后自动把关键帧插值设为 **Bezier（AUTO_CLAMPED）**，不会过冲
+  - 回执新增 `reduce` 字段：`dense` / `keys` / `ratio_pct` / `mean_err_deg` /
+    `max_err_deg` / `bezier_fcurves`
+  - 实测：612 帧 Mocap → 137 帧（22.4%），平均误差 1.58°、最大 3.19°
+
+- **支持两种 `.casc` 网格资产格式**
+  - 旧：base64 二进制 `mesh` blob
+  - 新：明文 `vertices` / `normals` / `texture_coords` / `triangles_vertex_indices`
+  - 视频对象（无几何）自动跳过，不再报 `KeyError: 'mesh'`
+
+- **导出 FPS 可配置**（`--fps`），Mocap 视频通常是 25
+
+### 修复
+
+- `parse_meshes` 遇到视频对象崩溃
+- `keyreduce.slerp` 未做批量处理（`(B,4)` 数组被当成矩阵乘）
+- Blender 4.4+ slotted action 的 `fcurves` 访问兼容（用于设置 Bezier）
+
+---
+
 ## v0.2.0 — 2026-10-26
 
 ### 新增
