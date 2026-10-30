@@ -1,76 +1,73 @@
 # @dsh-external/dsh-cascadeur-plugin
 
-把 **Cascadeur 的 `.casc` 动画**搬进 **Blender / UE5**。
+**English** | [简体中文](README.zh-CN.md)
 
-> 原理：通过 Cascadeur 内置的 **MCP 脚本服务器**（`127.0.0.1:8765`）读取每个关节的
-> `Global Matrix`，在 Blender 里用**原版 FBX** 重建姿势，再导出 FBX。
-> 不修改、不破解 Cascadeur 的任何授权机制。
+Move **Cascadeur `.casc` animations** into **Blender / UE5**.
+
+> How it works: read each joint's **`Global Matrix`** through Cascadeur's built-in
+> **MCP script server** (`127.0.0.1:8765`), rebuild the pose in Blender on the
+> **original FBX**, then export FBX. It does not modify or bypass any of
+> Cascadeur's licensing mechanisms.
 >
-> **精度：逐顶点误差 0.000 cm**（与 Cascadeur 自己的 `calc_skinned_mesh` 对比）。
-> 这个数字不是口头保证：`verify/verify_rebuild.py` 会把它变成可执行断言（见 §验证）。
-
-**English tl;dr** — A DSH plugin that converts Cascadeur `.casc` animations to
-Blender / UE5 FBX by reading per-joint `Global Matrix` through Cascadeur's MCP
-script server and rebuilding the pose on the original FBX (0.000 cm vertex
-error, asserted by `verify/verify_rebuild.py`). Ships error-driven keyframe
-reduction (angle + position thresholds, Bezier `AUTO_CLAMPED`), Mocap single-frame
-glitch repair, and unit tests (`npm test`, `python tests/*.py`).
+> **Accuracy: 0.000 cm per-vertex error** (compared against Cascadeur's own `calc_skinned_mesh`).
+> That number is not a promise on trust: `verify/verify_rebuild.py` turns it into an
+> executable assertion (see §Verification).
 
 <p align="center">
-  <img src="docs/demo.gif" width="1000" alt="Cascadeur .casc → Blender 重建 → FBX（612 帧击剑 Mocap）">
+  <img src="docs/demo.gif" width="1000" alt="Cascadeur .casc → rebuilt in Blender → FBX (612-frame fencing mocap)">
 </p>
 
 <p align="center">
-  <sub>左：Cascadeur 播放 <code>.casc</code>（小窗是驱动它的参考视频）　·　右：Blender 里重建后的 <code>.blend</code> / 导出的 <code>.fbx</code></sub><br>
-  <sub>同一段 612 帧击剑 Mocap，逐帧同步。完整 30 fps 版：<a href="docs/demo.mp4">docs/demo.mp4</a></sub>
+  <sub>Left: Cascadeur playing the <code>.casc</code> (the inset is the reference video driving it)　·　Right: the rebuilt <code>.blend</code> / exported <code>.fbx</code> in Blender</sub><br>
+  <sub>Same 612-frame fencing mocap, frame-synced. Full 30 fps version: <a href="docs/demo.mp4">docs/demo.mp4</a></sub>
 </p>
 
 ---
 
-## 一、前置条件
+## 1. Prerequisites
 
-| 项 | 要求 |
+| Item | Requirement |
 |---|---|
-| Cascadeur | 任意版本（含免费版）；需要开脚本服务器（可自动化，见下） |
-| Blender | 5.x（Python 需带 `zstandard`；5.4 已自带） |
-| 原版模型 FBX | 当初导入 Cascadeur 用的那个 FBX（**不要用改过的**） |
+| Cascadeur | Any version (Free included); its script server must be running (automatable, see below) |
+| Blender | 5.x (its Python must ship `zstandard`; 5.4 bundles it) |
+| Original model FBX | The very FBX that was imported into Cascadeur (**not a modified copy**) |
 | DSH | 0.1.7+ |
 
-### 开 Cascadeur 脚本服务器
+### Starting the Cascadeur script server
 
-**方式 A（手动，最快）**
+**Option A (manual, fastest)**
 
-Cascadeur 菜单栏 → **Scripts** → **MCP** → **Start script server**
+Cascadeur menu bar → **Scripts** → **MCP** → **Start script server**
 
-**方式 B（自动，一次配置永久生效）**
+**Option B (automatic, configure once)**
 
-把 [`cascadeur_autostart/autostart.py`](cascadeur_autostart/) 复制到
-`<Cascadeur安装目录>\resources\scripts\python\scripts\mcp\`，
-之后每次启动 Cascadeur 都会自动开 8765（约 60 秒后就绪）。
+Copy [`cascadeur_autostart/autostart.py`](cascadeur_autostart/) into
+`<Cascadeur install dir>\resources\scripts\python\scripts\mcp\`;
+from then on every Cascadeur launch opens port 8765 by itself (ready in ~60 s).
 
-详见 [cascadeur_autostart/README.md](cascadeur_autostart/README.md)。
+See [cascadeur_autostart/README.md](cascadeur_autostart/README.md) for details.
 
-> 没开的话工具会明确提示你怎么开。
+> If the server is not running, the tools tell you exactly how to start it.
 
 ---
 
-## 二、工具
+## 2. Tools
 
-| 工具 | 用途 |
+| Tool | Purpose |
 |---|---|
-| `casc_status` | 环境自检：Cascadeur 是否可达 / Blender 路径 / 当前设置 |
-| `casc_inspect` | 只读解析 `.casc`：角色、骨骼、帧范围、LOD、分层。**不需要开 Cascadeur** |
-| `casc_dump` | 只导出动画数据（Global Matrix → JSON） |
-| `casc2blend` | **一条龙**：读 → 重建 → `.blend`（可开启关键帧简化） |
-| `casc2fbx` | **一条龙**：读 → 重建 → `.fbx`（可直接进 UE5） |
-| `casc_verify` | 验证：骨骼位置 vs Cascadeur 数据（正常 < 0.01 cm） |
-| `casc_config` | 读写默认设置（持久化，后续导出默认用它） |
+| `casc_status` | Environment check: is Cascadeur reachable / Blender path / current settings |
+| `casc_inspect` | Read-only `.casc` parsing: characters, bones, frame range, LODs, layers. **Cascadeur does not need to be running** |
+| `casc_dump` | Dump animation data only (`Global Matrix` → JSON) |
+| `casc2blend` | **One-shot**: read → rebuild → `.blend` (keyframe reduction optional) |
+| `casc2fbx` | **One-shot**: read → rebuild → `.fbx` (UE5-ready) |
+| `casc_verify` | Verify: bone positions vs Cascadeur data (normally < 0.01 cm) |
+| `casc_config` | Read/write default settings (persisted; later exports use them) |
 
 ---
 
-## 三、典型用法
+## 3. Typical usage
 
-### 1. 先配置一次（之后一直生效）
+### 1. Configure once (applies from then on)
 
 ```
 casc_config({ set: {
@@ -80,127 +77,129 @@ casc_config({ set: {
 }})
 ```
 
-> `modelFbx` 必须是**当初导入 Cascadeur 用的那个原始 FBX**（不要用后来改过的）。
-> `outDir` 留空则默认输出到 `<casc 所在目录>/casc_out`。
+> `modelFbx` must be the **original FBX that was imported into Cascadeur** (not a later modified one).
+> Leave `outDir` empty to default to `<directory of the .casc>/casc_out`.
 
-设置存在 `~/.dsh/cascadeur-settings.json`，**不改变就一直按它来**。
+Settings live in `~/.dsh/cascadeur-settings.json` and are used until you change them.
 
-### 2. 看一眼 .casc 里有什么
+### 2. Inspect a .casc
 
 ```
 casc_inspect({ casc_path: "D:\\path\\to\\scene.casc" })
 ```
 
-返回：角色列表（含顶点数、蒙皮骨骼数）、关节数、帧范围、FPS、动画分层。
+Returns: character list (vertex counts, skinned bone counts), joint count, frame range, FPS, animation layers.
 
-### 3. 一条龙导出
+### 3. One-shot export
 
 ```
 casc2fbx({ casc_path: "D:\\path\\to\\scene.casc" })
 ```
 
-返回：帧数、关节数、LOD、`rest_err_cm`（应 ~0.0001）、
-`bone_pos_err_cm`（应 ~0.0001）、FBX 路径与大小。
+Returns: frame count, joint count, LOD, `rest_err_cm` (should be ~0.0001),
+`bone_pos_err_cm` (should be ~0.0001), FBX path and size.
 
-**开启关键帧简化**（推荐用于 Mocap 结果）：
+**Enabling keyframe reduction** (recommended for Mocap results):
 
 ```
 casc2fbx({
   casc_path: "D:\\path\\to\\scene.casc",
-  reduce_keys: true,     // 只写误差驱动选出的关键帧 + Bezier(AUTO_CLAMPED)
-  key_angle: 2.0,        // 允许的最大平均角度误差（度）
-  key_pos: 2.0,          // 允许的最大平均位置误差（厘米）
-  min_gap: 1,            // 关键帧最小间隔
-  despike: true          // 先修掉 Mocap 的单帧跳变
+  reduce_keys: true,     // write only the error-driven keyframes + Bezier(AUTO_CLAMPED)
+  key_angle: 2.0,        // allowed max mean angular error (degrees)
+  key_pos: 2.0,          // allowed max mean positional error (cm)
+  min_gap: 1,            // minimum spacing between keyframes
+  despike: true          // repair Mocap single-frame spikes first
 })
 ```
 
-返回里会多出：
+The result then also contains:
 
-- `despike`：`fixed_frames`（被修复的跳变帧号）/ `rounds` / `converged`
-- `reduce`：`dense` / `keys` / `ratio_pct` / `key_angle_deg` / `key_pos_cm` /
-  `min_gap` / `violations`（**真实**超标帧数）/ `mean_angle_err` /
+- `despike`: `fixed_frames` (frames that were repaired) / `rounds` / `converged`
+- `reduce`: `dense` / `keys` / `ratio_pct` / `key_angle_deg` / `key_pos_cm` /
+  `min_gap` / `violations` (**actual** frames over threshold) / `mean_angle_err` /
   `max_angle_err` / `mean_pos_err_cm` / `max_pos_err_cm` / `bezier_fcurves`
-- `gm`：`cached`（是否复用了 GM 缓存）/ `path`
-- `matched_bones` / `missing_bones` / `unmatched_fbx_bones`（骨骼名对不上时会显式报告）
+- `gm`: `cached` (whether the GM cache was reused) / `path`
+- `matched_bones` / `missing_bones` / `unmatched_fbx_bones` (reported explicitly when bone names do not line up)
 
-> `violations = 0` 才代表"所有帧都满足阈值"。
+> Only `violations = 0` means "every frame satisfies the thresholds".
 
-### 4. 验证
+### 4. Verify
 
 ```
 casc_verify({ casc_path: "D:\\...\\scene.casc" })
 ```
 
-它会断言 `rest_err_cm` 与 `bone_pos_err_max_cm` ≤ 0.01 cm，并检查骨骼名是否全部匹配
-（缺骨时 `ok=false`）。同样的断言也能独立跑：
+It asserts `rest_err_cm` and `bone_pos_err_max_cm` ≤ 0.01 cm and checks that every bone name
+matches (missing bones → `ok=false`). The same assertion can run standalone:
 
 ```bash
 blender -b --factory-startup --python verify/verify_rebuild.py -- \
   --casc scene.casc --gm scene_gm.json --model-fbx Model.fbx --tolerance-cm 0.01
 ```
 
-输出 markdown 表格 + 非 0 退出码，可直接进 CI。
+It prints a markdown table and exits non-zero on failure, so it drops straight into CI.
 
 ---
 
-## 四、设置项
+## 4. Settings
 
-| 键 | 说明 | 默认 |
+| Key | Meaning | Default |
 |---|---|---|
-| `blenderExe` | Blender 路径 | 自动探测（复用 dsh-blender-plugin 的配置） |
-| `modelFbx` | 原版模型 FBX | **空**（必须先配置） |
-| `lod` | 网格 LOD：`0` / `all` / `0,2` | `0` |
-| `outDir` | 默认输出目录 | `<casc 同目录>/casc_out` |
-| `frames` | 帧范围：`auto` / `0-10` | `auto`（用场景时间轴范围） |
-| `reduceKeys` | 默认是否开启关键帧简化 | `false` |
-| `keyAngleDeg` | 允许的最大平均角度误差（度） | `2.0` |
-| `keyPosCm` | 允许的最大平均位置误差（厘米） | `2.0` |
-| `keyMinGap` | 两个关键帧的最小间隔（1 = 允许相邻帧） | `1` |
-| `despike` | 自动修复 Mocap 单帧跳变 | `true` |
-| `fps` | 导出帧率（Mocap 视频通常是 25） | `30` |
+| `blenderExe` | Blender path | auto-detected (reuses dsh-blender-plugin's config) |
+| `modelFbx` | original model FBX | **empty** (must be configured first) |
+| `lod` | mesh LOD: `0` / `all` / `0,2` | `0` |
+| `outDir` | default output directory | `<next to the .casc>/casc_out` |
+| `frames` | frame range: `auto` / `0-10` | `auto` (scene timeline range) |
+| `reduceKeys` | enable keyframe reduction by default | `false` |
+| `keyAngleDeg` | allowed max mean angular error (degrees) | `2.0` |
+| `keyPosCm` | allowed max mean positional error (cm) | `2.0` |
+| `keyMinGap` | minimum spacing between keyframes (1 = adjacent frames allowed) | `1` |
+| `despike` | automatically repair Mocap single-frame spikes | `true` |
+| `fps` | export frame rate (Mocap video is usually 25) | `30` |
 
 ---
 
-## 五、核心公式（不要改）
+## 5. Core formulas (do not change)
 
 ```python
 B4 = [[1,0,0,0],[0,0,-1,0],[0,1,0,0],[0,0,0,1]]   # Y-up → Z-up
 
 W_rest[joint] = W_rest[parent] @ (T(pos) @ Euler(rot,'ZYX').to_matrix())
-A(t) = B4 @ M_global(t)          # ⚠️ 只左乘！@ B4.T 会多转 90°，整模扭曲
+A(t) = B4 @ M_global(t)          # ⚠️ LEFT-multiply only! @ B4.T adds an extra 90° and twists the whole model
 D(t) = A(t) @ inv(W_rest[joint])
 pose_bone.matrix = D(t) @ bone.matrix_local
 ```
 
-> **踩过的坑**：`B4 @ M @ B4.T`（相似变换）会给每根骨加 90° roll，
-> 表现是"每个关节都在扭"，但所有位置检查都通过（位置永远是对的）——
-> 这个 bug 曾让整个项目卡了十几个小时。诊断方法：
+> **The trap we hit**: `B4 @ M @ B4.T` (a similarity transform) adds a 90° roll to every bone.
+> The symptom is "every joint is twisting", while all position checks still pass
+> (positions are always correct). This bug cost this project a dozen-plus hours.
+> How to diagnose it:
 >
 > ```
-> rest(stastics) ↔ Blender bind  = ~0°   ← 正常
-> GM(绑定帧)     ↔ Blender bind  = 90°   ← 说明 B4 用错了
+> rest(statics)   ↔ Blender bind  = ~0°    ← normal
+> GM(bind frame)  ↔ Blender bind  = 90°    ← B4 is being applied wrong
 > ```
 
 ---
 
-## 六、关键帧简化（Mocap 结果必备）
+## 6. Keyframe reduction (essential for Mocap results)
 
-Cascadeur 的 Video-mocap 写的是**逐帧关键帧**（示例：612 帧），带有人体估计的抖动。
-直接用手感很差、也难编辑。插件内置了**误差驱动**的关键帧简化：
+Cascadeur's Video-mocap writes **per-frame keys** (612 frames in our sample), with human-estimation jitter.
+Using that directly feels bad and is hard to edit. The plugin ships **error-driven** keyframe reduction:
 
 ```
-从 [首帧, 末帧] 开始
-→ 每帧算"用相邻关键帧插值后"的误差（角度 + 位置分开算）
-→ 挑归一化违约度最大的帧加入关键帧
-→ 重复，直到所有帧 max(角度/阈值, 位置/阈值) ≤ 1
+Start from [first frame, last frame]
+→ for every frame, compute the error of interpolating from its neighbouring keyframes
+  (angle and position are normalised separately)
+→ add the frame with the largest normalised violation as a keyframe
+→ repeat until max(angle/threshold, position/threshold) ≤ 1 for every frame
 ```
 
-比"只看速度"稳：**慢速但有关节的段落（缓慢收剑）不会被误删**。
+This is steadier than "speed only": **slow but articulated passages (a slow sword withdrawal) are not thrown away**.
 
-### 实测（612 帧击剑 Mocap，先修复 5 帧跳变）
+### Measured (612-frame fencing Mocap, after repairing 5 spike frames)
 
-| 角度阈值 | 位置阈值 | 关键帧 | 占比 | 实测最大误差 | 超标 |
+| Angle threshold | Position threshold | Keyframes | Ratio | Measured max error | Violations |
 |---|---|---|---|---|---|
 | 1.0° | 0.5 cm | 355 | 58% | 0.97° / 0.49 cm | 0 |
 | 1.5° | 1.0 cm | 257 | 42% | 1.47° / 0.99 cm | 0 |
@@ -208,113 +207,117 @@ Cascadeur 的 Video-mocap 写的是**逐帧关键帧**（示例：612 帧），�
 | 3.0° | 3.0 cm | 142 | 23% | 2.96° / 2.78 cm | 0 |
 | 5.0° | 5.0 cm | 100 | 16% | 4.88° / 4.98 cm | 0 |
 
-（`min_gap=1`；`min_gap` 调大能进一步减少帧数，但会牺牲精度——它是硬约束。）
+(`min_gap=1`; raising `min_gap` cuts more frames but sacrifices accuracy — it is a hard constraint.)
 
-### Mocap 跳变修复
+### Mocap spike repair
 
-Mocap 偶尔会有**单帧追踪失败**：该帧姿势瞬间跳几十厘米再回来，
-不修的话 FBX 里会看到明显的抽搐。
+Mocap occasionally has **single-frame tracking failures**: that frame jumps tens of centimetres and comes back.
+Left unfixed, the FBX shows a visible twitch.
 
 ```
-detect_spikes: 逐帧位移 vs 局部滚动中位数，比值 > 4 且持续 ≤ 8 个帧间 → 判为跳变
-repair_spikes: 用前后帧插值替换，迭代至收敛
+detect_spikes: per-frame displacement vs a local rolling median;
+               ratio > 4 lasting ≤ 8 frame gaps → classified as a spike
+repair_spikes: replace with interpolation from the neighbouring frames, iterate until convergence
 ```
 
-上述 612 帧样例里检出并修复了 `257, 258, 259, 597, 598` 五帧
-（修复前最大角度误差 27.7°，修复后 1.97°）。修复帧号写在回执的
-`despike.fixed_frames` 里，不会偷偷改。
+On the 612-frame sample above, `257, 258, 259, 597, 598` were detected and repaired
+(worst angular error before repair: 27.7°; after: 1.97°). The repaired frame numbers are reported in
+`despike.fixed_frames` — nothing is changed silently.
 
-开启方式：
+How to enable:
 
 ```
 casc2fbx({ casc_path: "...", reduce_keys: true, key_angle: 2.0, key_pos: 2.0, despike: true })
 ```
 
-或写进默认设置：`casc_config({set:{reduceKeys:true, keyAngleDeg:2.0, keyPosCm:2.0}})`。
+Or persist it in the defaults: `casc_config({set:{reduceKeys:true, keyAngleDeg:2.0, keyPosCm:2.0}})`.
 
-> `.blend` 里是稀疏的 Bezier 关键帧（可手改）；
-> `.fbx` 会按帧烘焙（引擎友好），但烘焙结果是**沿 Bezier 曲线**的，所以依然平滑。
+> In `.blend` you get sparse Bezier keys (hand-editable);
+> `.fbx` is baked per frame (engine-friendly), but the bake follows the **Bezier curve**, so it stays smooth.
 
 ---
 
-## 七、把视频喂给 Cascadeur 的 Mocap（踩坑记录）
+## 7. Feeding video into Cascadeur's Mocap (gotchas)
 
-### 坑 1：视频时间基导致"只有第一帧正常"
+### Gotcha 1: the video time base makes "only the first frame is correct"
 
-QuickTime 视频的 `time_base` 常常是 `1/12800`，25fps 时每帧 = 512 个时间单位。
-Cascadeur 抽帧时按**时间码**命名（`000000.jpg, 000512.jpg, 001024.jpg ...`），
-但读取时按**帧序号**找（`000001.jpg, 000002.jpg ...`）→ 只有第 0 帧对得上。
+QuickTime video often has a `time_base` of `1/12800`; at 25 fps each frame is 512 time units.
+When Cascadeur extracts frames it names them by **time code** (`000000.jpg, 000512.jpg, 001024.jpg ...`),
+but when reading them back it looks them up by **frame index** (`000001.jpg, 000002.jpg ...`)
+→ only frame 0 lines up.
 
-**修复**：导入前重编码，把时间基改成 fps：
+**Fix**: re-encode before importing so the time base equals the frame rate:
 
 ```bash
-ffmpeg -i 原视频.mp4 -c:v libx264 -crf 16 -r 25 -video_track_timescale 25 -an 修复后.mp4
+ffmpeg -i original.mp4 -c:v libx264 -crf 16 -r 25 -video_track_timescale 25 -an fixed.mp4
 ```
 
-### 坑 2：`.casc` 里网格资产的两种存储格式
+### Gotcha 2: two storage formats for mesh assets inside `.casc`
 
-| 格式 | 字段 | 说明 |
+| Format | Fields | Notes |
 |---|---|---|
-| 旧 | `mesh`（base64 二进制 blob） | `[ver][count][16B/顶点][索引]` |
-| 新 | `vertices` / `normals` / `texture_coords` / `triangles_vertex_indices` | 明文数组 |
+| Old | `mesh` (base64 binary blob) | `[ver][count][16B/vertex][indices]` |
+| New | `vertices` / `normals` / `texture_coords` / `triangles_vertex_indices` | plain arrays |
 
-插件两种都支持；视频对象（没有几何数据）会被自动跳过。
+Both are supported; video objects (no geometry data) are skipped automatically.
 
-### 坑 3：Mocap 是本地 CPU 推理，吃内存
+### Gotcha 3: Mocap is local CPU inference and eats memory
 
-模型 787 MB（`resources\mocap.pt`），首次使用需下载；
-700 帧约 23 分钟（i5-10500H，6 核），峰值内存 9 GB+，可能触发
-Cascadeur 的 6 GB 限制并**清空撤销历史**。长片建议分段处理。
+The model is 787 MB (`resources\mocap.pt`) and must be downloaded on first use;
+~700 frames take about 23 minutes (i5-10500H, 6 cores) and peak memory exceeds 9 GB, which can trip
+Cascadeur's 6 GB limit and **wipe the undo history**. Split long clips into chunks.
 
 ---
 
-## 八、安装 / 卸载
+## 8. Install / uninstall
 
-安装（把包加入 DSH profile）：
+Install (add the package to a DSH profile):
 
 ```powershell
-# 1. profile 的 package.json 里加依赖 + bundle（脚本会自动备份）
-# 2. node_modules 里建 junction 指向本目录
-# 3. 重启 DSH
+# 1. add the dependency + bundle entry to the profile's package.json (the script backs up first)
+# 2. create a junction in node_modules pointing at this directory
+# 3. restart DSH
 ```
 
-见 `install.ps1` / `uninstall.ps1`。
+See `install.ps1` / `uninstall.ps1`.
 
 ---
 
-## 九、验证与测试
+## 9. Verification & tests
 
 ```bash
-# Node 侧纯逻辑（28 项断言，不需要 DSH / Blender）
-node tests/test_core.mjs          # 或 npm test
+# Node-side pure logic (28 assertions; no DSH / Blender required)
+node tests/test_core.mjs          # or npm test
 
-# 关键帧简化（12 项；--bench 可跑真实 612 帧数据）
+# Keyframe reduction (12 assertions; --bench runs the real 612-frame data)
 python tests/test_keyreduce.py
 
-# .casc 解析（25 项；需要 numpy + zstandard，或用 Blender 自带 Python）
+# .casc parsing (25 assertions; needs numpy + zstandard, or Blender's bundled Python)
 python tests/test_casc_core.py
 ```
 
-精度验收（需要真实的 `.casc` + 原版 FBX，不进 CI）：
+Accuracy acceptance (needs a real `.casc` + the original FBX; not part of CI):
 
 ```bash
 blender -b --factory-startup --python verify/verify_rebuild.py -- \
   --casc scene.casc --gm scene_gm.json --model-fbx Model.fbx --tolerance-cm 0.01
 ```
 
-CI：`.github/workflows/ci.yml`（Windows runner）跑上面三套测试 + 全脚本 `ast.parse`。
+CI: `.github/workflows/ci.yml` (Windows runner) runs the three suites above plus `ast.parse` over every script.
 
-> 改代码前请先读 [`AGENTS.md`](AGENTS.md) —— 里面把「会咬人」的约定按
-> 「症状 → 代码位置」列了一遍（B4 只左乘、骨骼名匹配、帧范围语义、
-> keyreduce 单位不能混、Mocap 跳变、BOM 禁令等）。
+> Read [`AGENTS.md`](AGENTS.md) before changing code — it lists the things that bite as
+> symptom → code location (left-multiply-only B4, bone-name matching, frame-range semantics,
+> keyreduce unit mixing, Mocap spikes, the BOM ban, ...).
 
 ---
 
-## 十、限制
+## 10. Limitations
 
-- **不**跨机器：读的是本机 Cascadeur 的实时数据
-- 一个 `.casc` 里多个角色时，当前导出所有蒙皮网格（`lod` 只影响带 LOD 后缀的网格，
-  道具网格始终保留；`MeshObject(N)` 且 ≤4 顶点的参考视频平面会被自动跳过）
-- 动画节奏按 30fps 假设（Cascadeur 默认）；非 30fps 场景会从 `scene_settings.json` 读取
-- 不做 IK 重解算：直接使用 Cascadeur 求值后的 `Global Matrix`（这就是精确的原因）
-- `keyreduce` 的 `min_gap` 是硬约束：设得过大会让阈值承诺失效（回执里 `violations` 会如实报告）
+- **Not** cross-machine: it reads live data from Cascadeur on the same machine.
+- With several characters in one `.casc`, all skinned meshes are exported (`lod` only affects
+  meshes whose names carry a LOD suffix; prop meshes are always kept; `MeshObject(N)`
+  reference-video planes with ≤ 4 vertices are skipped automatically).
+- Timing assumes 30 fps (Cascadeur's default); non-30 fps scenes are read from `scene_settings.json`.
+- No IK re-solve: it uses Cascadeur's evaluated `Global Matrix` as-is (that is exactly why it is accurate).
+- `keyreduce`'s `min_gap` is a hard constraint: setting it too high invalidates the threshold
+  promise (the `violations` field in the result reports it honestly).

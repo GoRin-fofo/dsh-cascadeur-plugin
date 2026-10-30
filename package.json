@@ -1,7 +1,7 @@
 {
   "name": "@dsh-external/dsh-cascadeur-plugin",
   "version": "0.4.0",
-  "description": "把 Cascadeur 的 .casc 动画搬进 Blender / UE5：通过官方 MCP 脚本服务器读取 Global Matrix，在 Blender 里重建并导出 FBX（逐顶点误差 0.000 cm），内置关键帧简化与 Mocap 跳变修复。",
+  "description": "Move Cascadeur .casc animations into Blender / UE5: reads per-joint Global Matrix through Cascadeur's official MCP script server, rebuilds the pose in Blender on the original FBX and exports FBX (0.000 cm per-vertex error). Ships error-driven keyframe reduction and Mocap spike repair.",
   "private": false,
   "keywords": [
     "dsh",
@@ -22,8 +22,10 @@
     "lib",
     "runtime",
     "cascadeur_autostart",
+    "docs",
     "cordis.patch.yml",
     "README.md",
+    "README.zh-CN.md",
     "CHANGELOG.md",
     "AGENTS.md",
     "LICENSE",
