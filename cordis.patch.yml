@@ -1,11 +1,12 @@
-# @dsh-external/dsh-cascadeur-plugin bundle 层
+# dsh-cascadeur-plugin bundle 层
 #
 # 作用：让 DSH 的 plugin-manager 认出本包是「profile 层」而不是普通依赖。
-# 安装 = profile 的 package.json 里加依赖 + dsh.profile.bundles 里加包名。
+# 安装（推荐）：dsh plugin --profile <profile> add dsh-cascadeur-plugin
+# 离线安装：install.ps1（改 profile 的 package.json + node_modules 建 junction）
 #
 # 与 dsh-blender-plugin 不冲突：工具名不重叠（casc_*/casc2*），
 # 且会复用它的 dsh-blender.config.json 里的 blenderExe。
 - insert:
     - id: dsh-cascadeur-plugin
-      name: '@dsh-external/dsh-cascadeur-plugin'
+      name: 'dsh-cascadeur-plugin'
       config: {}

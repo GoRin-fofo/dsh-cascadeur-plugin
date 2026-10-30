@@ -21,10 +21,17 @@ jobs:
       - name: JS core tests
         run: node tests/test_core.mjs
 
+      - name: packaging checks
+        run: |
+          node tests/test_packaging.mjs
+          npm pack --dry-run
+
       - name: syntax check
         run: |
           node --check lib/index.js
           node --check lib/core.js
+          node --check tests/test_core.mjs
+          node --check tests/test_packaging.mjs
 
   # ── Python 侧（不需要 Blender）──
   python:

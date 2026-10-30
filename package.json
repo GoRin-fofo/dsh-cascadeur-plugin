@@ -1,10 +1,12 @@
 {
-  "name": "@dsh-external/dsh-cascadeur-plugin",
-  "version": "0.4.0",
+  "name": "dsh-cascadeur-plugin",
+  "version": "0.4.1",
   "description": "Move Cascadeur .casc animations into Blender / UE5: reads per-joint Global Matrix through Cascadeur's official MCP script server, rebuilds the pose in Blender on the original FBX and exports FBX (0.000 cm per-vertex error). Ships error-driven keyframe reduction and Mocap spike repair.",
   "private": false,
   "keywords": [
     "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
     "cascadeur",
     "blender",
     "ue5",
@@ -14,15 +16,17 @@
     "keyframe-reduction"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "dsh": ">=0.1.7"
   },
   "type": "module",
   "main": "./lib/index.js",
   "files": [
     "lib",
     "runtime",
+    "!runtime/__pycache__",
+    "!runtime/**/*.pyc",
     "cascadeur_autostart",
-    "docs",
     "cordis.patch.yml",
     "README.md",
     "README.zh-CN.md",
@@ -34,9 +38,14 @@
   ],
   "scripts": {
     "test": "node tests/test_core.mjs",
+    "test:pack": "node tests/test_packaging.mjs",
     "test:py": "python tests/test_keyreduce.py",
     "test:casc": "python tests/test_casc_core.py",
-    "verify": "python verify/verify_rebuild.py"
+    "verify": "python verify/verify_rebuild.py",
+    "prepublishOnly": "node tests/test_core.mjs && node tests/test_packaging.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "license": "MIT",
   "repository": {

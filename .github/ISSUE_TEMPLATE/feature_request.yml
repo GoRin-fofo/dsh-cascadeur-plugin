@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest a workflow or an API improvement
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: workflow
+    attributes:
+      label: What workflow are you trying to achieve?
+      description: Describe the end goal (e.g. "export a 4-character scene and keep each character separate"), not only the API you want.
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: What happens today?
+      description: Current workaround, if any.
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API / behaviour (optional)
+      placeholder: |
+        casc2fbx({ casc_path: "...", split_characters: true })
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues first
+        - label: This is about the plugin, not about training/improving a mocap model

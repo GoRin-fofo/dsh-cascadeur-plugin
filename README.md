@@ -1,8 +1,16 @@
-# @dsh-external/dsh-cascadeur-plugin
+# dsh-cascadeur-plugin
 
 **English** | [简体中文](README.zh-CN.md)
 
+[![npm version](https://img.shields.io/npm/v/dsh-cascadeur-plugin?color=cb3837&logo=npm)](https://www.npmjs.com/package/dsh-cascadeur-plugin)
+[![CI](https://github.com/GoRin-fofo/dsh-cascadeur-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/GoRin-fofo/dsh-cascadeur-plugin/actions/workflows/ci.yml)
+[![license](https://img.shields.io/github/license/GoRin-fofo/dsh-cascadeur-plugin)](LICENSE)
+
 Move **Cascadeur `.casc` animations** into **Blender / UE5**.
+
+```bash
+dsh plugin --profile web add dsh-cascadeur-plugin
+```
 
 > How it works: read each joint's **`Global Matrix`** through Cascadeur's built-in
 > **MCP script server** (`127.0.0.1:8765`), rebuild the pose in Blender on the
@@ -14,12 +22,12 @@ Move **Cascadeur `.casc` animations** into **Blender / UE5**.
 > executable assertion (see §Verification).
 
 <p align="center">
-  <img src="docs/demo.gif" width="1000" alt="Cascadeur .casc → rebuilt in Blender → FBX (612-frame fencing mocap)">
+  <img src="https://raw.githubusercontent.com/GoRin-fofo/dsh-cascadeur-plugin/main/docs/demo.gif" width="1000" alt="Cascadeur .casc → rebuilt in Blender → FBX (612-frame fencing mocap)">
 </p>
 
 <p align="center">
   <sub>Left: Cascadeur playing the <code>.casc</code> (the inset is the reference video driving it)　·　Right: the rebuilt <code>.blend</code> / exported <code>.fbx</code> in Blender</sub><br>
-  <sub>Same 612-frame fencing mocap, frame-synced. Full 30 fps version: <a href="docs/demo.mp4">docs/demo.mp4</a></sub>
+  <sub>Same 612-frame fencing mocap, frame-synced. Full 30 fps version: <a href="https://github.com/GoRin-fofo/dsh-cascadeur-plugin/blob/main/docs/demo.mp4">docs/demo.mp4</a></sub>
 </p>
 
 ---
@@ -271,15 +279,30 @@ Cascadeur's 6 GB limit and **wipe the undo history**. Split long clips into chun
 
 ## 8. Install / uninstall
 
-Install (add the package to a DSH profile):
+**From npm (recommended)** — one command; `dsh plugin` adds the bundle to the profile:
+
+```bash
+dsh plugin --profile web add dsh-cascadeur-plugin
+# other profiles: replace `web` (e.g. headless)
+```
+
+Restart `dsh web` afterwards. Upgrade with `dsh plugin --profile web update dsh-cascadeur-plugin`.
+
+> Desktop shells read the same `desktop` profile but install differently: the official
+> desktop app has a plugin screen (enter the package name), while community shells use
+> `dsh plugin --profile desktop add dsh-cascadeur-plugin`. If your `dsh` has no `plugin`
+> subcommand, use the offline path below.
+
+**From a local clone (offline / development)** — no npm access required:
 
 ```powershell
 # 1. add the dependency + bundle entry to the profile's package.json (the script backs up first)
 # 2. create a junction in node_modules pointing at this directory
 # 3. restart DSH
+.\install.ps1
 ```
 
-See `install.ps1` / `uninstall.ps1`.
+Uninstall: `dsh plugin --profile web remove dsh-cascadeur-plugin`, or run `.\uninstall.ps1`.
 
 ---
 

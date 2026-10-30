@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation / 使用文档
+    url: https://github.com/GoRin-fofo/dsh-cascadeur-plugin#readme
+    about: Install, settings, keyframe reduction and gotchas are documented in the README.
+  - name: Security issue / 安全问题
+    url: https://github.com/GoRin-fofo/dsh-cascadeur-plugin/security/advisories/new
+    about: Please report vulnerabilities privately, not as public issues.

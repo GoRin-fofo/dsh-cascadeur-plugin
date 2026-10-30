@@ -1,19 +1,27 @@
 <#
-  安装 @dsh-external/dsh-cascadeur-plugin 到 DSH profile。
+  Offline install of dsh-cascadeur-plugin into a DSH profile (no npm required).
 
-  ⚠️ 血泪教训（2026-10-21）：
-     绝不能用 `Set-Content -Encoding UTF8` 写 profile 的 package.json！
-     Windows PowerShell 5.1 的 `-Encoding UTF8` 会写入 BOM，
-     而 DSH 用 JSON.parse 读 profile → "Unexpected token '<BOM>'" → 应用启动崩溃。
-     本脚本改用 [System.IO.File]::WriteAllText + UTF8Encoding($false) ← 保证无 BOM。
+  Recommended (needs npm access):
+      dsh plugin --profile web add dsh-cascadeur-plugin
 
-  做四件事：
-    1. 备份 package.json
-    2. 加依赖 + dsh.profile.bundles 条目
-    3. 无 BOM 写出 + 双重校验（字节检查 + node JSON.parse），失败自动回滚
-    4. node_modules/@dsh-external 下建 junction
+  This script is for: no npm access, or installing straight from a local checkout.
 
-  完成后重启 DSH 才会出现工具。
+  NOTE (2026-10-21): never write the profile package.json with
+  `Set-Content -Encoding UTF8` - Windows PowerShell 5.1 writes a BOM, and DSH's
+  JSON.parse then fails with "Unexpected token '<BOM>'". This script uses
+  [System.IO.File]::WriteAllText + UTF8Encoding($false) to guarantee no BOM.
+
+  What it does:
+    1. backs up the profile package.json
+    2. adds the dependency + dsh.profile.bundles entry
+       (and removes leftovers from the legacy name @dsh-external/dsh-cascadeur-plugin)
+    3. writes without BOM + double validation (byte check + node JSON.parse), rolls back on failure
+    4. creates a junction in node_modules
+
+  Restart DSH afterwards.
+
+  This file is intentionally ASCII-only: Windows PowerShell 5.1 reads .ps1 files
+  as ANSI unless they have a BOM, so non-ASCII text can break parsing.
 #>
 param(
   [string]$ProfileDir = "$env:USERPROFILE\.dsh\profiles\desktop",
@@ -21,68 +29,83 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$pkgName = '@dsh-external/dsh-cascadeur-plugin'
+$pkgName = 'dsh-cascadeur-plugin'
+$legacyName = '@dsh-external/dsh-cascadeur-plugin'
 $pkgJsonPath = Join-Path $ProfileDir 'package.json'
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
-if (-not (Test-Path $pkgJsonPath)) { throw "找不到 profile package.json: $pkgJsonPath" }
-if (-not (Test-Path $PluginDir)) { throw "找不到插件目录: $PluginDir" }
+if (-not (Test-Path $pkgJsonPath)) { throw "profile package.json not found: $pkgJsonPath" }
+if (-not (Test-Path $PluginDir)) { throw "plugin directory not found: $PluginDir" }
 
-# ── 1. 备份 ──
+# -- 1. backup ---------------------------------------------------------------
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $bak = "$pkgJsonPath.bak-$stamp"
 Copy-Item $pkgJsonPath $bak
-Write-Host "已备份: $bak"
+Write-Host "backup: $bak"
 
-# ── 2. 读取（自动去 BOM）并修改 ──
+# -- 2. read (strip BOM) and modify -----------------------------------------
 $text = [System.IO.File]::ReadAllText($pkgJsonPath).TrimStart([char]0xFEFF)
 $json = $text | ConvertFrom-Json
 
 if (-not $json.dependencies) {
   $json | Add-Member -NotePropertyName dependencies -NotePropertyValue ([PSCustomObject]@{})
 }
+
+# migrate away from the old scoped package name
+if ($json.dependencies.PSObject.Properties.Name -contains $legacyName) {
+  $json.dependencies.PSObject.Properties.Remove($legacyName)
+  Write-Host "removed legacy dependency: $legacyName"
+}
+
 $depValue = 'file:' + ($PluginDir -replace '\\', '/')
 if ($json.dependencies.PSObject.Properties.Name -contains $pkgName) {
   $json.dependencies.$pkgName = $depValue
 } else {
   $json.dependencies | Add-Member -NotePropertyName $pkgName -NotePropertyValue $depValue
 }
-$bundles = @($json.dsh.profile.bundles) | Where-Object { $_ }
+$bundles = @($json.dsh.profile.bundles) | Where-Object { $_ -and $_ -ne $legacyName }
 if ($bundles -notcontains $pkgName) { $bundles += $pkgName }
 $json.dsh.profile.bundles = $bundles
 
-# ── 3. 无 BOM 写出 ──
+# -- 3. write without BOM ----------------------------------------------------
 $out = $json | ConvertTo-Json -Depth 10
 [System.IO.File]::WriteAllText($pkgJsonPath, $out, $utf8NoBom)
 
-# ── 4. 校验（失败自动回滚）──
+# -- 4. validate (roll back on failure) -------------------------------------
 $bytes = [System.IO.File]::ReadAllBytes($pkgJsonPath)
 if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
   Copy-Item $bak $pkgJsonPath -Force
-  throw "写出后检测到 BOM，已自动回滚到备份。"
+  throw "BOM detected after write; rolled back to backup."
 }
-Write-Host "字节校验: 无 BOM ✓"
+Write-Host "byte check: no BOM [ok]"
 
 $check = [System.IO.File]::ReadAllText($pkgJsonPath) | ConvertFrom-Json
 if (@($check.dsh.profile.bundles) -notcontains $pkgName) {
   Copy-Item $bak $pkgJsonPath -Force
-  throw "校验失败：bundles 里没有 $pkgName，已回滚"
+  throw "validation failed: bundles does not contain $pkgName; rolled back"
 }
 & node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log('node JSON.parse: OK')" $pkgJsonPath
 if ($LASTEXITCODE -ne 0) {
   Copy-Item $bak $pkgJsonPath -Force
-  throw "node 解析失败，已回滚"
+  throw "node JSON.parse failed; rolled back"
 }
 
-# ── 5. junction ──
-$nmScope = Join-Path $ProfileDir 'node_modules\@dsh-external'
-New-Item -ItemType Directory -Force -Path $nmScope | Out-Null
-$linkPath = Join-Path $nmScope 'dsh-cascadeur-plugin'
+# -- 5. junction -------------------------------------------------------------
+$nmDir = Join-Path $ProfileDir 'node_modules'
+New-Item -ItemType Directory -Force -Path $nmDir | Out-Null
+$linkPath = Join-Path $nmDir $pkgName
 if (Test-Path $linkPath) { Remove-Item $linkPath -Recurse -Force }
 New-Item -ItemType Junction -Path $linkPath -Target $PluginDir | Out-Null
-Write-Host "已建 junction: $linkPath -> $PluginDir"
+Write-Host "junction: $linkPath -> $PluginDir"
+
+# remove the legacy-name junction if present (keep other packages under the scope)
+$legacyLink = Join-Path $nmDir '@dsh-external\dsh-cascadeur-plugin'
+if (Test-Path $legacyLink) {
+  Remove-Item $legacyLink -Recurse -Force
+  Write-Host "removed legacy junction: $legacyLink"
+}
 
 Write-Host ""
-Write-Host "✅ 安装完成（package.json 无 BOM、JSON 校验通过）。" -ForegroundColor Green
-Write-Host "   请【重启 DSH】，然后在会话里运行：casc_status"
-Write-Host "   回滚: .\uninstall.ps1    备份: $bak"
+Write-Host "install complete (package.json has no BOM, JSON validation passed)." -ForegroundColor Green
+Write-Host "  restart DSH, then run: casc_status"
+Write-Host "  rollback: .\uninstall.ps1    backup: $bak"

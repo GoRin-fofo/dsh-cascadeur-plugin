@@ -1,5 +1,32 @@
 # 变更记录
 
+## v0.4.1 — 2026-10-30
+
+首个可发布到 npm 的版本。**包名从 `@dsh-external/dsh-cascadeur-plugin` 改为 `dsh-cascadeur-plugin`**（无 scope，`dsh plugin add` 可直接安装）。
+
+### 打包与分发
+
+- npm 安装：`dsh plugin --profile web add dsh-cascadeur-plugin`
+- `package.json`：加 `publishConfig.access=public`、`engines.dsh`，`files` 收紧（`docs/` 的演示视频不再打进 npm 包）
+- `.github/workflows/publish.yml`：推 `v*` tag（或手动触发）时发布 npm + 自动建 GitHub Release；支持 OIDC 可信发布，配了 `NPM_TOKEN` 也能用
+- `install.ps1` / `uninstall.ps1`：改用新包名，并自动清理旧包名（`@dsh-external/...`）的 profile 条目与 junction
+
+### 文档与治理
+
+- README 中英双语：顶部加 npm / CI / license 徽章和一条安装命令；演示 GIF 改为绝对地址（GitHub 与 npm 都能显示）
+- 新增 `CONTRIBUTING.md`、`SECURITY.md`、issue / PR 模板
+
+### 测试
+
+- 新增 `tests/test_packaging.mjs`：校验包名、`publishConfig`、`engines`、`files`、README 安装命令与 demo 链接
+- CI 增加打包校验与 `npm pack --dry-run`
+
+### 迁移
+
+旧安装（junction 方式、旧包名）会被新 `install.ps1` / `uninstall.ps1` 自动清理；重启 DSH 即可。
+
+---
+
 ## v0.4.0 — 2026-10-30
 
 按外部评审（REVIEW.md §6）修的「三件事」。核心原则：**把"宣称"变成"可验证"**。

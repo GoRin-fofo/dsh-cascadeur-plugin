@@ -1,0 +1,81 @@
+name: Bug report
+description: Something in the plugin (or its export pipeline) does not work as documented
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please fill in as much of the environment as you can —
+        most Cascadeur/Blender issues are version-specific.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you run, and what came back? Paste the tool result JSON if you have it.
+      placeholder: |
+        casc2fbx({ casc_path: "D:\\...\\scene.casc" }) returned ok:false ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. casc_config({ set: { modelFbx: "..." } })
+        2. casc2fbx({ casc_path: "...", reduce_keys: true })
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Cascadeur / Blender / DSH / Node / OS
+      placeholder: "Cascadeur 2026.2.3, Blender 5.4, DSH 0.4.x, Node 20.19, Windows 11"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it fail?
+      options:
+        - casc_status / environment check
+        - casc_inspect (parsing .casc)
+        - casc_dump (reading Global Matrix from Cascadeur)
+        - casc2blend / casc2fbx (rebuild + export)
+        - keyframe reduction / despike
+        - casc_verify (accuracy)
+        - install / uninstall
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Useful sources: `%TEMP%\\dsh_mcp_autostart.log`, the tool's `error`/`traceback` fields,
+        Blender's stderr (the JS tool returns the tail).
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmations
+      options:
+        - label: I ran `casc_status` and pasted its result above
+        - label: I am on the latest release (`npm view dsh-cascadeur-plugin version`)
+        - label: My `.casc` can be opened in Cascadeur normally

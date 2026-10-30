@@ -1,8 +1,16 @@
-# @dsh-external/dsh-cascadeur-plugin
+# dsh-cascadeur-plugin
 
 [English](README.md) | **简体中文**
 
+[![npm version](https://img.shields.io/npm/v/dsh-cascadeur-plugin?color=cb3837&logo=npm)](https://www.npmjs.com/package/dsh-cascadeur-plugin)
+[![CI](https://github.com/GoRin-fofo/dsh-cascadeur-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/GoRin-fofo/dsh-cascadeur-plugin/actions/workflows/ci.yml)
+[![license](https://img.shields.io/github/license/GoRin-fofo/dsh-cascadeur-plugin)](LICENSE)
+
 把 **Cascadeur 的 `.casc` 动画**搬进 **Blender / UE5**。
+
+```bash
+dsh plugin --profile web add dsh-cascadeur-plugin
+```
 
 > 原理：通过 Cascadeur 内置的 **MCP 脚本服务器**（`127.0.0.1:8765`）读取每个关节的
 > `Global Matrix`，在 Blender 里用**原版 FBX** 重建姿势，再导出 FBX。
@@ -19,12 +27,12 @@ reduction (angle + position thresholds, Bezier `AUTO_CLAMPED`), Mocap single-fra
 glitch repair, and unit tests (`npm test`, `python tests/*.py`).
 
 <p align="center">
-  <img src="docs/demo.gif" width="1000" alt="Cascadeur .casc → Blender 重建 → FBX（612 帧击剑 Mocap）">
+  <img src="https://raw.githubusercontent.com/GoRin-fofo/dsh-cascadeur-plugin/main/docs/demo.gif" width="1000" alt="Cascadeur .casc → Blender 重建 → FBX（612 帧击剑 Mocap）">
 </p>
 
 <p align="center">
   <sub>左：Cascadeur 播放 <code>.casc</code>（小窗是驱动它的参考视频）　·　右：Blender 里重建后的 <code>.blend</code> / 导出的 <code>.fbx</code></sub><br>
-  <sub>同一段 612 帧击剑 Mocap，逐帧同步。完整 30 fps 版：<a href="docs/demo.mp4">docs/demo.mp4</a></sub>
+  <sub>同一段 612 帧击剑 Mocap，逐帧同步。完整 30 fps 版：<a href="https://github.com/GoRin-fofo/dsh-cascadeur-plugin/blob/main/docs/demo.mp4">docs/demo.mp4</a></sub>
 </p>
 
 ---
@@ -272,15 +280,29 @@ Cascadeur 的 6 GB 限制并**清空撤销历史**。长片建议分段处理。
 
 ## 八、安装 / 卸载
 
-安装（把包加入 DSH profile）：
+**从 npm 安装（推荐）** —— 一条命令，`dsh plugin` 会自动把它加进 profile 的 bundles：
+
+```bash
+dsh plugin --profile web add dsh-cascadeur-plugin
+# 其他 profile 把 web 换掉即可（例如 headless）
+```
+
+装完重启 `dsh web`。升级：`dsh plugin --profile web update dsh-cascadeur-plugin`。
+
+> 桌面壳读同一个 `desktop` profile，但装法不同：官方桌面壳在「插件界面」里填包名；
+> 社区桌面壳用 `dsh plugin --profile desktop add dsh-cascadeur-plugin`。
+> 如果你的 `dsh` 没有 `plugin` 子命令，用下面的离线方式。
+
+**从本地仓库安装（离线 / 开发用）** —— 不依赖 npm：
 
 ```powershell
 # 1. profile 的 package.json 里加依赖 + bundle（脚本会自动备份）
 # 2. node_modules 里建 junction 指向本目录
 # 3. 重启 DSH
+.\install.ps1
 ```
 
-见 `install.ps1` / `uninstall.ps1`。
+卸载：`dsh plugin --profile web remove dsh-cascadeur-plugin`，或跑 `.\uninstall.ps1`。
 
 ---
 
