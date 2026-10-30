@@ -108,7 +108,7 @@ casc2fbx({
 
 返回里会多出：
 
-- `despike`：`fixed_frames`（被修复的跳变帧号）/ `iterations`
+- `despike`：`fixed_frames`（被修复的跳变帧号）/ `rounds` / `converged`
 - `reduce`：`dense` / `keys` / `ratio_pct` / `key_angle_deg` / `key_pos_cm` /
   `min_gap` / `violations`（**真实**超标帧数）/ `mean_angle_err` /
   `max_angle_err` / `mean_pos_err_cm` / `max_pos_err_cm` / `bezier_fcurves`

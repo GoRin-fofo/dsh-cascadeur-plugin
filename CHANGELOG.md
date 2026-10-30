@@ -20,7 +20,7 @@
 
 - **Mocap 跳变修复**（`keyreduce.detect_spikes` / `repair_spikes`）
   - 检出单帧追踪失败（局部位移比 > 4 倍且持续 ≤ 8 帧），用前后帧插值替换
-  - 迭代至收敛；修复帧号写进回执 `despike.fixed_frames`
+  - 迭代至收敛；修复帧号写进回执 `despike.fixed_frames`（含 `rounds` / `converged`）
   - 实测：612 帧数据里帧 257/258/259/597/598 是坏的，修完最大角度误差 27.7° → 1.97°
 
 ### 修复（评审指出的正确性问题）
