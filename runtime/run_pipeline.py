@@ -359,21 +359,23 @@ def rebuild(casc, gm_path, model_fbx, lod_spec, fbx_out=None, blend_out=None,
         import keyreduce
         try:
             if use_despike:
-                fixed_all, iters = [], 0
-                while iters < 4:
-                    iters += 1
+                fixed_all, rounds, max_rounds = [], 0, 4
+                while rounds < max_rounds:
                     sp = [f for f in keyreduce.detect_spikes(gm) if f not in fixed_all]
                     if not sp:
                         break
+                    rounds += 1
                     fixed_all.extend(sp)
                     gm, _ = keyreduce.repair_spikes(gm, sp)
-                    print("despike iter %d: fixed %s" % (iters, sp), flush=True)
-                despike_stats = {"fixed_frames": sorted(fixed_all), "iterations": iters}
+                    print("despike round %d: fixed %s" % (rounds, sp), flush=True)
+                despike_stats = {"fixed_frames": sorted(fixed_all),
+                                 "rounds": rounds, "max_rounds": max_rounds,
+                                 "converged": rounds < max_rounds}
                 if fixed_all:
                     with open(gm_path + ".despiked.json", "w", encoding="utf-8") as fh:
                         json.dump(gm, fh)
-                    print("despike: %d frames repaired (%s)" % (
-                        len(fixed_all), sorted(fixed_all)), flush=True)
+                    print("despike: %d frames repaired in %d round(s) (%s)" % (
+                        len(fixed_all), rounds, sorted(fixed_all)), flush=True)
 
             write_frames, reduce_stats = keyreduce.reduce_keys(
                 gm,
