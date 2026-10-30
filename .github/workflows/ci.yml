@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # ── Node 侧纯逻辑（不需要 DSH、不需要 Blender）──
+  node:
+    name: node tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: JS core tests
+        run: node tests/test_core.mjs
+
+      - name: syntax check
+        run: |
+          node --check lib/index.js
+          node --check lib/core.js
+
+  # ── Python 侧（不需要 Blender）──
+  python:
+    name: python tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: install deps
+        run: pip install numpy zstandard
+
+      - name: keyreduce unit tests
+        run: python tests/test_keyreduce.py
+        env:
+          PYTHONIOENCODING: utf-8
+
+      - name: casc_core unit tests
+        run: python tests/test_casc_core.py
+        env:
+          PYTHONIOENCODING: utf-8
+
+  # ── Blender 侧 ──
+  # 说明：verify_rebuild.py 需要 Blender + 一个真实的 .casc/FBX 样本。
+  # 这两样都不适合塞进仓库（.casc 是用户资产，Blender 300+ MB），
+  # 所以这里只做「能解析、能导入、能构造 CLI 参数」的语法级检查；
+  # 精度断言请在本地用 verify/verify_rebuild.py 跑（README §验证）。
+  blender-lint:
+    name: blender script lint
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: ast parse all blender-side scripts
+        run: |
+          python -c "import ast,glob,sys;[ast.parse(open(p,encoding='utf-8').read()) for p in glob.glob('runtime/*.py')+glob.glob('verify/*.py')];print('ast ok')"

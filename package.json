@@ -1,7 +1,7 @@
 {
   "name": "@dsh-external/dsh-cascadeur-plugin",
-  "version": "0.3.0",
-  "description": "把 Cascadeur 的 .casc 动画搬进 Blender / UE5：通过官方 MCP 脚本服务器读取 Global Matrix，在 Blender 里重建并导出 FBX（逐顶点误差 0.000 cm）。",
+  "version": "0.4.0",
+  "description": "把 Cascadeur 的 .casc 动画搬进 Blender / UE5：通过官方 MCP 脚本服务器读取 Global Matrix，在 Blender 里重建并导出 FBX（逐顶点误差 0.000 cm），内置关键帧简化与 Mocap 跳变修复。",
   "private": false,
   "keywords": [
     "dsh",
@@ -9,7 +9,9 @@
     "blender",
     "ue5",
     "animation",
-    "fbx"
+    "fbx",
+    "mocap",
+    "keyframe-reduction"
   ],
   "engines": {
     "node": ">=20"
@@ -19,10 +21,30 @@
   "files": [
     "lib",
     "runtime",
+    "cascadeur_autostart",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md",
+    "AGENTS.md",
+    "LICENSE",
+    "install.ps1",
+    "uninstall.ps1"
   ],
+  "scripts": {
+    "test": "node tests/test_core.mjs",
+    "test:py": "python tests/test_keyreduce.py",
+    "test:casc": "python tests/test_casc_core.py",
+    "verify": "python verify/verify_rebuild.py"
+  },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GoRin-fofo/dsh-cascadeur-plugin.git"
+  },
+  "homepage": "https://github.com/GoRin-fofo/dsh-cascadeur-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/GoRin-fofo/dsh-cascadeur-plugin/issues"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

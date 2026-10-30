@@ -23,3 +23,12 @@ desktop.ini
 # 导出产物
 casc_out/
 *.blend1
+
+# GM 缓存 / 中间产物（v0.4.0 起缓存进 _dsh_cache/）
+_dsh_cache/
+*_gm.json
+*.despiked.json
+*.meta.json
+
+# 测试固件（make_fixture.py 生成）
+tests/_fixture_*.casc

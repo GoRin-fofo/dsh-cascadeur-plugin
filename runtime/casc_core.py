@@ -22,7 +22,7 @@ B4 = np.array([[1, 0, 0, 0],
 
 # ────────────────────────────── .casc 解包 ──────────────────────────────
 def read_casc_entry(casc_path, want_name):
-    """从 .casc（ZIP + Zstandard method 93）里取出一个文件并解压。"""
+    """从 .casc（ZIP；条目通常是 Zstandard method 93）里取出一个文件并解压。"""
     buf = open(casc_path, "rb").read()
     eocd = buf.rfind(b"PK\x05\x06")
     if eocd < 0:
@@ -32,6 +32,7 @@ def read_casc_entry(casc_path, want_name):
     for _ in range(n_entries):
         if buf[p:p + 4] != b"PK\x01\x02":
             break
+        method, = struct.unpack_from("<H", buf, p + 10)
         csize, usize = struct.unpack_from("<II", buf, p + 20)
         nlen, elen, clen = struct.unpack_from("<HHH", buf, p + 28)
         lho, = struct.unpack_from("<I", buf, p + 42)
@@ -40,10 +41,23 @@ def read_casc_entry(casc_path, want_name):
             n2, e2 = struct.unpack_from("<HH", buf, lho + 26)
             off = lho + 30 + n2 + e2
             comp = buf[off:off + csize]
+            if method == 0:                       # stored
+                return comp
+            if method == 8:                       # deflate
+                import zlib
+                return zlib.decompress(comp, -15)
+            if method != 93:                      # 93 = Zstandard
+                raise RuntimeError(
+                    "条目 %r 使用了不支持的压缩方法 %d（期望 93=Zstandard / 8=deflate / 0=stored）"
+                    % (want_name, method))
             try:
                 return zstandard.ZstdDecompressor().decompress(comp, max_output_size=usize + 1024)
-            except Exception:
-                return comp
+            except Exception as exc:
+                # 绝不能把解压失败的原始字节当成 JSON 往下传（会静默产出垃圾）
+                raise RuntimeError(
+                    "无法解压 .casc 内的条目 %r（%d 字节压缩 / %d 字节原始）：%r\n"
+                    "可能是 zstandard 版本不匹配，或文件不完整。"
+                    % (want_name, csize, usize, exc))
         p += 46 + nlen + elen + clen
     return None
 
@@ -201,29 +215,59 @@ def parse_meshes(scene_json):
     return out
 
 
-def pick_lod_meshes(meshes, lod_spec):
-    """按 lod 参数筛选网格。lod_spec: '0' | 'all' | '0,2'"""
+def pick_lod_meshes(meshes, lod_spec, drop_reference_planes=True):
+    """按 lod 参数筛选网格。
+
+    语义（v0.4.0 修正）：
+      * 名字里没有 LOD 的网格（道具、剑等）**始终保留**，不会被 lod 参数误删
+      * 有 LOD 的网格：只保留请求的 LOD
+      * lod_spec: '0' | 'all' | '0,2'
+      * 默认丢掉"参考视频平面"（名字形如 MeshObject(0) 且只有 <=4 个顶点的四边形）
+    """
+    import re
+
     def lod_of(name):
         u = (name or "").upper()
+        m = re.search(r"LOD[_-]?(\d+)", u)
+        if m:
+            return int(m.group(1))
         if "LOD" in u:
             try:
                 return int(u.split("LOD")[-1][0])
             except Exception:
-                return 0
-        return 0
+                return None
+        return None
 
-    named = sorted(meshes, key=lambda m: lod_of(m["object"]))
-    if lod_spec in (None, "", "0"):
-        return [m for m in named if lod_of(m["object"]) == 0][:1] or named[:1]
-    if str(lod_spec).lower() == "all":
-        return named
+    def is_reference_plane(m):
+        nm = m.get("object") or ""
+        if not re.match(r"^MeshObject\(\d+\)$", nm):
+            return False
+        return int(m.get("verts") or 0) <= 4
+
+    keep = []
+    for m in meshes:
+        if drop_reference_planes and is_reference_plane(m):
+            continue
+        keep.append(m)
+
+    if str(lod_spec or "0").strip().lower() == "all":
+        return sorted(keep, key=lambda m: (lod_of(m["object"]) is None, lod_of(m["object"]) or 0))
+
     want = []
-    for tok in str(lod_spec).split(","):
+    for tok in str(lod_spec or "0").split(","):
         tok = tok.strip()
         if tok.isdigit():
             want.append(int(tok))
-    picked = [m for m in named if lod_of(m["object"]) in want]
-    return picked or named[:1]
+    if not want:
+        want = [0]
+
+    picked = []
+    for m in keep:
+        lv = lod_of(m["object"])
+        if lv is None or lv in want:      # 道具 / 匹配的 LOD
+            picked.append(m)
+    picked.sort(key=lambda m: (lod_of(m["object"]) is None, lod_of(m["object"]) or 0))
+    return picked or keep[:1]
 
 
 # ────────────────────────────── 姿势应用 ──────────────────────────────
@@ -259,3 +303,32 @@ def frame_list(frames_spec, default_end):
         a, b = s.split("-")
         return list(range(int(a), int(b) + 1))
     return [int(x) for x in s.split(",") if x.strip()]
+
+
+def frame_list_checked(frames_spec, start, end):
+    """带校验的 frame_list：显式指定范围时，超出或为空都报错（不再静默回退）。
+
+    返回 (frames, notes)。
+    """
+    notes = []
+    if frames_spec in (None, "", "auto"):
+        return list(range(start, end + 1)), notes
+    frames = frame_list(frames_spec, end)
+    if not frames:
+        raise ValueError("--frames 解析为空：%r" % (frames_spec,))
+    outside = [f for f in frames if f < start or f > end]
+    if outside:
+        raise ValueError(
+            "--frames 指定的帧超出了该 .casc 的时间轴范围 [%d, %d]：%s\n"
+            "（如果目标是更长的时间轴，请先在 Cascadeur 里改 timeline 的 EndFrame 并保存）"
+            % (start, end, outside[:8]))
+    # 去重保序
+    seen, uniq = set(), []
+    for f in frames:
+        if f not in seen:
+            seen.add(f)
+            uniq.append(f)
+    if len(uniq) != len(frames):
+        notes.append("frames 去重：%d -> %d（部分帧可能因此不连续，插值会退化）"
+                     % (len(frames), len(uniq)))
+    return uniq, notes

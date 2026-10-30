@@ -31,14 +31,26 @@ def parse_args():
     i = 0
     while i < len(argv):
         k = argv[i]
-        if k.startswith("--"):
-            key = k[2:].replace("-", "_")
-            val = argv[i + 1] if i + 1 < len(argv) and not argv[i + 1].startswith("--") else "true"
-            out[key] = val
+        if not k.startswith("--"):
+            i += 1
+            continue
+        if "=" in k:                       # --key=value
+            key, val = k[2:].split("=", 1)
+            out[key.replace("-", "_")] = val
+            i += 1
+            continue
+        key = k[2:].replace("-", "_")
+        if i + 1 < len(argv) and not argv[i + 1].startswith("--"):
+            out[key] = argv[i + 1]
             i += 2
-        else:
+        else:                              # 布尔开关
+            out[key] = "true"
             i += 1
     return out
+
+
+def _truthy(v):
+    return str(v).lower() in ("1", "true", "yes", "on")
 
 
 ARGS = parse_args()
@@ -111,8 +123,12 @@ def fetch_gm(casc_path, frames):
     load_out = casc_run("import csc\n"
                         "mp = csc.app.get_application()\n"
                         "print(mp.get_data_source_manager().load_scene(%r))\n" % casc_abs)
-    if "rror" in load_out or "False" in load_out.splitlines()[-1:][0] if load_out.splitlines() else False:
-        pass  # 加载失败会在下面取不到数据时暴露
+    last = (load_out.strip().splitlines() or [""])[-1].strip().lower()
+    if last not in ("true", "ok"):
+        raise RuntimeError(
+            "Cascadeur 加载场景失败（返回：%r）。\n"
+            "请确认：Cascadeur 正在运行、MCP 脚本服务器已启动（127.0.0.1:8765）、\n"
+            "且该 .casc 路径存在。原始输出：\n%s" % (last, load_out[-800:]))
     # 2) 逐帧读
     code = '''
 import csc, json, numpy as np
@@ -152,18 +168,85 @@ def detect_frames_from_casc(casc_path):
     return int(data.get("StartFrame", 0)), int(data.get("EndFrame", 100))
 
 
+# ─────────────────────────── GM 缓存（按 .casc 内容指纹命名）───────────────────────────
+def casc_fingerprint(casc_path):
+    st = os.stat(casc_path)
+    return "%d_%d" % (st.st_size, int(st.st_mtime))
+
+
+def gm_cache_path(casc_path, frames_spec=None):
+    """缓存文件名里带上 .casc 的 size+mtime 与帧范围，避免读到过期缓存。"""
+    d = os.path.join(os.path.dirname(os.path.abspath(casc_path)), "_dsh_cache")
+    os.makedirs(d, exist_ok=True)
+    base = os.path.splitext(os.path.basename(casc_path))[0]
+    spec = (frames_spec or "all").replace(",", "-").replace(" ", "")
+    return os.path.join(d, "%s_%s_f%s_gm.json" % (base, casc_fingerprint(casc_path), spec))
+
+
+def resolve_gm_path(casc_path, force=False):
+    """返回 (gm 路径, 是否可直接复用)。"""
+    explicit = ARGS.get("gm")
+    if explicit:
+        return explicit, (os.path.exists(explicit) and not force)
+    path = gm_cache_path(casc_path, ARGS.get("frames"))
+    return path, (os.path.exists(path) and not force)
+
+
+def write_gm(gm, out_path, meta=None):
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(gm, f)
+    if meta:
+        with open(out_path + ".meta.json", "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False)
+
+
+def read_gm_meta(out_path):
+    try:
+        with open(out_path + ".meta.json", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 # ─────────────────────────── 模式：dump ───────────────────────────
+def do_dump(casc):
+    """读 Global Matrix 并落盘，返回 (路径, 元信息)。"""
+    a, b = detect_frames_from_casc(casc)
+    frames, notes = casc_core.frame_list_checked(ARGS.get("frames"), a, b)
+    gm, load_out = fetch_gm(casc, frames)
+    out, _ = resolve_gm_path(casc, force=True)
+    meta = {
+        "casc": os.path.abspath(casc),
+        "fingerprint": casc_fingerprint(casc),
+        "frames_requested": frames[0] if frames else None,
+        "frames": len(frames),
+        "range": [frames[0], frames[-1]] if frames else None,
+        "joints": len(next(iter(gm.values()))) if gm else 0,
+        "notes": notes,
+        "load_out": load_out[-300:],
+    }
+    write_gm(gm, out, meta)
+    return out, meta
+
+
 def mode_dump():
     casc = ARGS["casc"]
-    a, b = detect_frames_from_casc(casc)
-    frames = casc_core.frame_list(ARGS.get("frames"), b - 0)
-    frames = [f for f in frames if a <= f <= b] or list(range(a, b + 1))
-    gm, load_out = fetch_gm(casc, frames)
-    out = ARGS.get("gm") or (os.path.splitext(casc)[0] + "_gm.json")
-    with open(out, "w", encoding="utf-8") as f:
-        json.dump(gm, f)
-    emit(ok=True, mode="dump", casc=casc, gm=out, frames=len(frames),
-         joints=len(next(iter(gm.values()))) if gm else 0, load_out=load_out[-200:])
+    out, meta = do_dump(casc)
+    emit(ok=True, mode="dump", casc=casc, gm=out, frames=meta["frames"],
+         joints=meta["joints"], range=meta["range"], notes=meta["notes"],
+         load_out=meta["load_out"])
+
+
+def ensure_gm(casc):
+    """blend / export 用：缓存有效就复用，否则重读。"""
+    path, reusable = resolve_gm_path(casc, force=_truthy(ARGS.get("force", "false")))
+    if reusable:
+        meta = read_gm_meta(path)
+        print("gm cache hit:", path, flush=True)
+        return path, {"cached": True, "path": path, "meta": meta}
+    print("gm cache miss -> dumping:", path, flush=True)
+    out, meta = do_dump(casc)
+    return out, {"cached": False, "path": out, "meta": meta}
 
 
 # ─────────────────────────── 模式：blend / export ───────────────────────────
@@ -206,7 +289,8 @@ def iter_action_fcurves(act):
 
 
 def rebuild(casc, gm_path, model_fbx, lod_spec, fbx_out=None, blend_out=None,
-            use_reduce=False, key_threshold=1.5, fps=30):
+            use_reduce=False, key_threshold=1.5, fps=30,
+            use_despike=True, key_angle_deg=2.0, key_pos_cm=2.0, key_min_gap=1):
     js = casc_core.load_scene_json(casc)
     model = casc_core.load_model_pose(js)
     gm = json.load(open(gm_path, encoding="utf-8"))
@@ -218,6 +302,33 @@ def rebuild(casc, gm_path, model_fbx, lod_spec, fbx_out=None, blend_out=None,
     W_rest, order, parent = casc_core.compose_rest_world(arm, model)
     if not W_rest:
         raise RuntimeError("model pose 为空：.casc 里没有读到 statics")
+
+    # ── 隐式假设 → 显式断言 ──
+    fbx_bones = {b.name for b in arm.data.bones}
+    matched = [n for n in W_rest if n in fbx_bones]
+    missing = sorted(n for n in W_rest if n not in fbx_bones)
+    unmatched_fbx = sorted(fbx_bones - set(W_rest))
+    if not matched:
+        raise RuntimeError(
+            "骨架名对不上：.casc 里 %d 根骨没有一根能在 FBX 里找到。\n"
+            ".casc 示例：%s\nFBX 示例：%s\n"
+            "（--model-fbx 大概率选错了模型）"
+            % (len(W_rest), sorted(W_rest)[:6], sorted(fbx_bones)[:6]))
+    if missing:
+        print("WARN %d 根骨在 FBX 里不存在，已跳过：%s" % (len(missing), missing[:8]), flush=True)
+
+    # rotation_mode 必须是 QUATERNION，否则 keyframe_insert("rotation_quaternion") 不会生效
+    bad_mode = []
+    for n in matched:
+        pb = arm.pose.bones.get(n)
+        if pb is None:
+            continue
+        if pb.rotation_mode != 'QUATERNION':
+            bad_mode.append((n, pb.rotation_mode))
+            pb.rotation_mode = 'QUATERNION'
+    if bad_mode:
+        print("WARN %d 根骨的 rotation_mode 非 QUATERNION，已强制切换：%s" % (
+            len(bad_mode), bad_mode[:5]), flush=True)
 
     # 校验 rest 与绑定姿势
     rest_err = np.array([
@@ -240,17 +351,43 @@ def rebuild(casc, gm_path, model_fbx, lod_spec, fbx_out=None, blend_out=None,
     sc.render.fps = int(fps)
     sc.render.fps_base = 1.0
 
-    # ── 关键帧简化 ──
+    # ── 跳变修复 + 关键帧简化 ──
     write_frames = frame_keys
     reduce_stats = None
+    despike_stats = None
     if use_reduce:
         import keyreduce
         try:
-            write_frames, reduce_stats = keyreduce.reduce_keys(gm, threshold_deg=float(key_threshold))
+            if use_despike:
+                fixed_all, iters = [], 0
+                while iters < 4:
+                    iters += 1
+                    sp = [f for f in keyreduce.detect_spikes(gm) if f not in fixed_all]
+                    if not sp:
+                        break
+                    fixed_all.extend(sp)
+                    gm, _ = keyreduce.repair_spikes(gm, sp)
+                    print("despike iter %d: fixed %s" % (iters, sp), flush=True)
+                despike_stats = {"fixed_frames": sorted(fixed_all), "iterations": iters}
+                if fixed_all:
+                    with open(gm_path + ".despiked.json", "w", encoding="utf-8") as fh:
+                        json.dump(gm, fh)
+                    print("despike: %d frames repaired (%s)" % (
+                        len(fixed_all), sorted(fixed_all)), flush=True)
+
+            write_frames, reduce_stats = keyreduce.reduce_keys(
+                gm,
+                key_angle_deg=float(key_angle_deg),
+                key_pos_cm=float(key_pos_cm),
+                min_gap=int(key_min_gap))
             err = keyreduce.reconstruction_error(gm, write_frames)
-            reduce_stats.update({"mean_err_deg": err["mean"], "max_err_deg": err["max"]})
-            print("keyreduce: %d -> %d frames (threshold %.2f deg)" % (
-                reduce_stats["dense"], reduce_stats["keys"], float(key_threshold)), flush=True)
+            reduce_stats.update({
+                "mean_deg": err["mean_deg"], "max_deg": err["max_deg"],
+                "mean_cm": err["mean_cm"], "max_cm": err["max_cm"],
+            })
+            print("keyreduce: %d -> %d frames (angle<=%.2f deg, pos<=%.2f cm, violations=%d)" % (
+                reduce_stats["dense"], reduce_stats["keys"],
+                float(key_angle_deg), float(key_pos_cm), reduce_stats["violations"]), flush=True)
         except Exception as exc:
             print("keyreduce failed, falling back to dense keys:", repr(exc), flush=True)
             write_frames = frame_keys
@@ -293,11 +430,16 @@ def rebuild(casc, gm_path, model_fbx, lod_spec, fbx_out=None, blend_out=None,
         my = np.array(arm.matrix_world @ arm.pose.bones[n].head) * 100.0
         pos_err.append(np.linalg.norm(A[:3, 3] - my))
 
-    result = dict(ok=True, frames=len(frame_keys), joints=len(W_rest),
+    result = dict(ok=(not missing), frames=len(frame_keys), joints=len(W_rest),
+                  matched_bones=len(matched), missing_bones=missing,
+                  unmatched_fbx_bones=unmatched_fbx[:40],
+                  unmatched_fbx_count=len(unmatched_fbx),
                   lod=[m["object"] for m in casc_meshes],
                   rest_err_cm=float(rest_err.mean()) if len(rest_err) else None,
                   bone_pos_err_cm=float(np.mean(pos_err)) if pos_err else None,
                   bone_pos_err_max_cm=float(np.max(pos_err)) if pos_err else None)
+    if despike_stats is not None:
+        result["despike"] = despike_stats
     if reduce_stats is not None:
         result["reduce"] = reduce_stats
         result["keyframes"] = (len(write_frames) if "error" not in reduce_stats else len(frame_keys))
@@ -329,44 +471,58 @@ def rebuild(casc, gm_path, model_fbx, lod_spec, fbx_out=None, blend_out=None,
 
 def mode_blend():
     casc = ARGS["casc"]
-    gm = ARGS.get("gm") or (os.path.splitext(casc)[0] + "_gm.json")
-    if not os.path.exists(gm):
-        mode_dump()
-        # mode_dump 里 emit 过一次，这里继续（JS 侧以最后一次为准）
+    gm, cache_info = ensure_gm(casc)
     model_fbx = ARGS["model_fbx"]
     blend_out = ARGS["blend_out"]
     r = rebuild(casc, gm, model_fbx, ARGS.get("lod", "0"), blend_out=blend_out,
                 use_reduce=(ARGS.get("reduce_keys", "false").lower() in ("1", "true", "yes")),
-                key_threshold=float(ARGS.get("key_threshold", 1.5)),
+                key_threshold=float(ARGS.get("key_threshold", 2.0)),
+                use_despike=(ARGS.get("despike", "true").lower() in ("1", "true", "yes")),
+                key_angle_deg=float(ARGS.get("key_angle", ARGS.get("key_threshold", 2.0))),
+                key_pos_cm=float(ARGS.get("key_pos", 2.0)),
+                key_min_gap=int(ARGS.get("key_min_gap", 1)),
                 fps=int(ARGS.get("fps", 30)))
+    r["gm"] = cache_info
     r["mode"] = "blend"
     emit(**r)
 
 
 def mode_export():
     casc = ARGS["casc"]
-    gm = ARGS.get("gm") or (os.path.splitext(casc)[0] + "_gm.json")
-    if not os.path.exists(gm):
-        mode_dump()
+    gm, cache_info = ensure_gm(casc)
     model_fbx = ARGS["model_fbx"]
     fbx_out = ARGS["fbx_out"]
     r = rebuild(casc, gm, model_fbx, ARGS.get("lod", "0"), fbx_out=fbx_out,
                 use_reduce=(ARGS.get("reduce_keys", "false").lower() in ("1", "true", "yes")),
-                key_threshold=float(ARGS.get("key_threshold", 1.5)),
+                key_threshold=float(ARGS.get("key_threshold", 2.0)),
+                use_despike=(ARGS.get("despike", "true").lower() in ("1", "true", "yes")),
+                key_angle_deg=float(ARGS.get("key_angle", ARGS.get("key_threshold", 2.0))),
+                key_pos_cm=float(ARGS.get("key_pos", 2.0)),
+                key_min_gap=int(ARGS.get("key_min_gap", 1)),
                 fps=int(ARGS.get("fps", 30)))
+    r["gm"] = cache_info
     r["mode"] = "export"
     emit(**r)
 
 
 def mode_verify():
     casc = ARGS["casc"]
-    gm = ARGS.get("gm") or (os.path.splitext(casc)[0] + "_gm.json")
-    if not os.path.exists(gm):
-        mode_dump()
+    gm, cache_info = ensure_gm(casc)
     r = rebuild(casc, gm, ARGS["model_fbx"], ARGS.get("lod", "0"))
+    r["gm"] = cache_info
     r["mode"] = "verify"
-    ok = (r.get("bone_pos_err_max_cm") is not None and r["bone_pos_err_max_cm"] < 0.01)
+    limit = float(ARGS.get("tolerance_cm", 0.01))
+    checks = {
+        "rest_err_cm": r.get("rest_err_cm"),
+        "bone_pos_err_max_cm": r.get("bone_pos_err_max_cm"),
+        "missing_bones": r.get("missing_bones", []),
+    }
+    ok = (r.get("bone_pos_err_max_cm") is not None
+          and r["bone_pos_err_max_cm"] < limit
+          and not checks["missing_bones"])
     r["ok"] = bool(ok)
+    r["tolerance_cm"] = limit
+    r["checks"] = checks
     emit(**r)
 
 

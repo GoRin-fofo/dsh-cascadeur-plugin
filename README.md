@@ -7,6 +7,14 @@
 > 不修改、不破解 Cascadeur 的任何授权机制。
 >
 > **精度：逐顶点误差 0.000 cm**（与 Cascadeur 自己的 `calc_skinned_mesh` 对比）。
+> 这个数字不是口头保证：`verify/verify_rebuild.py` 会把它变成可执行断言（见 §验证）。
+
+**English tl;dr** — A DSH plugin that converts Cascadeur `.casc` animations to
+Blender / UE5 FBX by reading per-joint `Global Matrix` through Cascadeur's MCP
+script server and rebuilding the pose on the original FBX (0.000 cm vertex
+error, asserted by `verify/verify_rebuild.py`). Ships error-driven keyframe
+reduction (angle + position thresholds, Bezier `AUTO_CLAMPED`), Mocap single-frame
+glitch repair, and unit tests (`npm test`, `python tests/*.py`).
 
 ---
 
@@ -90,19 +98,40 @@ casc2fbx({ casc_path: "D:\\path\\to\\scene.casc" })
 ```
 casc2fbx({
   casc_path: "D:\\path\\to\\scene.casc",
-  reduce_keys: true,        // 只写误差驱动选出的关键帧
-  key_threshold: 1.5        // 平均角度误差阈值（度），越大帧越少
+  reduce_keys: true,     // 只写误差驱动选出的关键帧 + Bezier(AUTO_CLAMPED)
+  key_angle: 2.0,        // 允许的最大平均角度误差（度）
+  key_pos: 2.0,          // 允许的最大平均位置误差（厘米）
+  min_gap: 1,            // 关键帧最小间隔
+  despike: true          // 先修掉 Mocap 的单帧跳变
 })
 ```
 
-返回里会多出 `reduce` 字段：`dense` / `keys` / `ratio_pct` /
-`mean_err_deg` / `max_err_deg` / `bezier_fcurves`。
+返回里会多出：
+
+- `despike`：`fixed_frames`（被修复的跳变帧号）/ `iterations`
+- `reduce`：`dense` / `keys` / `ratio_pct` / `key_angle_deg` / `key_pos_cm` /
+  `min_gap` / `violations`（**真实**超标帧数）/ `mean_angle_err` /
+  `max_angle_err` / `mean_pos_err_cm` / `max_pos_err_cm` / `bezier_fcurves`
+- `gm`：`cached`（是否复用了 GM 缓存）/ `path`
+- `matched_bones` / `missing_bones` / `unmatched_fbx_bones`（骨骼名对不上时会显式报告）
+
+> `violations = 0` 才代表"所有帧都满足阈值"。
 
 ### 4. 验证
 
 ```
 casc_verify({ casc_path: "D:\\...\\scene.casc" })
 ```
+
+它会断言 `rest_err_cm` 与 `bone_pos_err_max_cm` ≤ 0.01 cm，并检查骨骼名是否全部匹配
+（缺骨时 `ok=false`）。同样的断言也能独立跑：
+
+```bash
+blender -b --factory-startup --python verify/verify_rebuild.py -- \
+  --casc scene.casc --gm scene_gm.json --model-fbx Model.fbx --tolerance-cm 0.01
+```
+
+输出 markdown 表格 + 非 0 退出码，可直接进 CI。
 
 ---
 
@@ -115,10 +144,11 @@ casc_verify({ casc_path: "D:\\...\\scene.casc" })
 | `lod` | 网格 LOD：`0` / `all` / `0,2` | `0` |
 | `outDir` | 默认输出目录 | `<casc 同目录>/casc_out` |
 | `frames` | 帧范围：`auto` / `0-10` | `auto`（用场景时间轴范围） |
-| `character` | 保留（多角色场景用） | `auto` |
-| `autoVerify` | 保留 | `true` |
 | `reduceKeys` | 默认是否开启关键帧简化 | `false` |
-| `keyThreshold` | 简化阈值（平均角度误差，度） | `1.5` |
+| `keyAngleDeg` | 允许的最大平均角度误差（度） | `2.0` |
+| `keyPosCm` | 允许的最大平均位置误差（厘米） | `2.0` |
+| `keyMinGap` | 两个关键帧的最小间隔（1 = 允许相邻帧） | `1` |
+| `despike` | 自动修复 Mocap 单帧跳变 | `true` |
 | `fps` | 导出帧率（Mocap 视频通常是 25） | `30` |
 
 ---
@@ -152,29 +182,46 @@ Cascadeur 的 Video-mocap 写的是**逐帧关键帧**（示例：612 帧），�
 
 ```
 从 [首帧, 末帧] 开始
-→ 算每一帧"用相邻关键帧插值后"的角度误差
-→ 挑误差最大的帧加入关键帧
-→ 重复，直到所有帧误差 ≤ 阈值
+→ 每帧算"用相邻关键帧插值后"的误差（角度 + 位置分开算）
+→ 挑归一化违约度最大的帧加入关键帧
+→ 重复，直到所有帧 max(角度/阈值, 位置/阈值) ≤ 1
 ```
 
 比"只看速度"稳：**慢速但有关节的段落（缓慢收剑）不会被误删**。
 
-实测（612 帧击剑 Mocap，阈值 1.5°）：
+### 实测（612 帧击剑 Mocap，先修复 5 帧跳变）
 
-| 指标 | 值 |
-|---|---|
-| 关键帧 | **612 → 137**（22.4%） |
-| 平均角度误差 | 1.58° |
-| 最大角度误差 | 3.19° |
-| 插值 | Bezier / AUTO_CLAMPED（不过冲） |
+| 角度阈值 | 位置阈值 | 关键帧 | 占比 | 实测最大误差 | 超标 |
+|---|---|---|---|---|---|
+| 1.0° | 0.5 cm | 355 | 58% | 0.97° / 0.49 cm | 0 |
+| 1.5° | 1.0 cm | 257 | 42% | 1.47° / 0.99 cm | 0 |
+| **2.0°** | **2.0 cm** | **184** | **30%** | **1.97° / 1.97 cm** | **0** |
+| 3.0° | 3.0 cm | 142 | 23% | 2.96° / 2.78 cm | 0 |
+| 5.0° | 5.0 cm | 100 | 16% | 4.88° / 4.98 cm | 0 |
+
+（`min_gap=1`；`min_gap` 调大能进一步减少帧数，但会牺牲精度——它是硬约束。）
+
+### Mocap 跳变修复
+
+Mocap 偶尔会有**单帧追踪失败**：该帧姿势瞬间跳几十厘米再回来，
+不修的话 FBX 里会看到明显的抽搐。
+
+```
+detect_spikes: 逐帧位移 vs 局部滚动中位数，比值 > 4 且持续 ≤ 8 个帧间 → 判为跳变
+repair_spikes: 用前后帧插值替换，迭代至收敛
+```
+
+上述 612 帧样例里检出并修复了 `257, 258, 259, 597, 598` 五帧
+（修复前最大角度误差 27.7°，修复后 1.97°）。修复帧号写在回执的
+`despike.fixed_frames` 里，不会偷偷改。
 
 开启方式：
 
 ```
-casc2fbx({ casc_path: "...", reduce_keys: true, key_threshold: 1.5 })
+casc2fbx({ casc_path: "...", reduce_keys: true, key_angle: 2.0, key_pos: 2.0, despike: true })
 ```
 
-或写进默认设置：`casc_config({set:{reduceKeys:true, keyThreshold:1.5}})`。
+或写进默认设置：`casc_config({set:{reduceKeys:true, keyAngleDeg:2.0, keyPosCm:2.0}})`。
 
 > `.blend` 里是稀疏的 Bezier 关键帧（可手改）；
 > `.fbx` 会按帧烘焙（引擎友好），但烘焙结果是**沿 Bezier 曲线**的，所以依然平滑。
@@ -212,7 +259,7 @@ Cascadeur 的 6 GB 限制并**清空撤销历史**。长片建议分段处理。
 
 ---
 
-## 六、安装 / 卸载
+## 八、安装 / 卸载
 
 安装（把包加入 DSH profile）：
 
@@ -226,9 +273,39 @@ Cascadeur 的 6 GB 限制并**清空撤销历史**。长片建议分段处理。
 
 ---
 
-## 七、限制
+## 九、验证与测试
+
+```bash
+# Node 侧纯逻辑（28 项断言，不需要 DSH / Blender）
+node tests/test_core.mjs          # 或 npm test
+
+# 关键帧简化（12 项；--bench 可跑真实 612 帧数据）
+python tests/test_keyreduce.py
+
+# .casc 解析（25 项；需要 numpy + zstandard，或用 Blender 自带 Python）
+python tests/test_casc_core.py
+```
+
+精度验收（需要真实的 `.casc` + 原版 FBX，不进 CI）：
+
+```bash
+blender -b --factory-startup --python verify/verify_rebuild.py -- \
+  --casc scene.casc --gm scene_gm.json --model-fbx Model.fbx --tolerance-cm 0.01
+```
+
+CI：`.github/workflows/ci.yml`（Windows runner）跑上面三套测试 + 全脚本 `ast.parse`。
+
+> 改代码前请先读 [`AGENTS.md`](AGENTS.md) —— 里面把「会咬人」的约定按
+> 「症状 → 代码位置」列了一遍（B4 只左乘、骨骼名匹配、帧范围语义、
+> keyreduce 单位不能混、Mocap 跳变、BOM 禁令等）。
+
+---
+
+## 十、限制
 
 - **不**跨机器：读的是本机 Cascadeur 的实时数据
-- 一个 `.casc` 里多个角色时，当前导出所有蒙皮网格（`character` 参数预留）
+- 一个 `.casc` 里多个角色时，当前导出所有蒙皮网格（`lod` 只影响带 LOD 后缀的网格，
+  道具网格始终保留；`MeshObject(N)` 且 ≤4 顶点的参考视频平面会被自动跳过）
 - 动画节奏按 30fps 假设（Cascadeur 默认）；非 30fps 场景会从 `scene_settings.json` 读取
 - 不做 IK 重解算：直接使用 Cascadeur 求值后的 `Global Matrix`（这就是精确的原因）
+- `keyreduce` 的 `min_gap` 是硬约束：设得过大会让阈值承诺失效（回执里 `violations` 会如实报告）
