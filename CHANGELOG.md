@@ -1,5 +1,31 @@
 # 变更记录
 
+## v0.4.2 — 2026-10-30
+
+文档与隐私清理；第一个经 GitHub Actions + OIDC 可信发布（带 npm provenance）的版本。
+
+### 文档
+
+- README 中英双语新增「实测环境 / Tested environment」表：
+  Windows 11（10.0.26200）、Cascadeur 2026.2.3（Free）、Blender 5.4（5.4.0 Alpha）、
+  DSH 宿主 API `dsh-tools@0.2.1-rc.5`、Node 24.21.0 / CI 20 与 24
+- 删掉「任意版本」这类无法验证的宣称，改为「实测通过 + 其他版本未验证」；
+  §限制 增加「Windows 11 是实测平台；macOS / Linux 尚未验证」
+- `tests/test_packaging.mjs` 新增断言：README 必须包含实测环境表，且不得再出现「任意版本」宣称
+
+### 隐私
+
+- 去掉仓库与 npm 包里的本机绝对路径：`cascadeur_autostart/autostart.py` 与
+  `cascadeur_autostart/README.md` 改用 `<Cascadeur安装目录>` 占位
+- `tests/test_keyreduce.py --bench` 改为从命令行接收 GM JSON 路径，不再硬编码本机路径
+
+### 发布
+
+- 首次通过 CI 发布：tag 触发 `.github/workflows/publish.yml`，用 OIDC 可信发布（无需 token），
+  并生成 npm provenance
+
+---
+
 ## v0.4.1 — 2026-10-30
 
 首个可发布到 npm 的版本。**包名从 `@dsh-external/dsh-cascadeur-plugin` 改为 `dsh-cascadeur-plugin`**（无 scope，`dsh plugin add` 可直接安装）。

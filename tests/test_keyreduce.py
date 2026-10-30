@@ -145,7 +145,12 @@ if __name__ == "__main__":
     test_reconstruction()
 
     if "--bench" in sys.argv:
-        bench(r"D:\WorkSpace\test\calib2\fdpos2_mocap_gm.json")
+        i = sys.argv.index("--bench")
+        gm_path = sys.argv[i + 1] if i + 1 < len(sys.argv) else None
+        if not gm_path:
+            print("\n用法: python tests/test_keyreduce.py --bench <你的全局矩阵 GM.json>")
+        else:
+            bench(gm_path)
 
     print("\n" + "=" * 60)
     if FAILS:

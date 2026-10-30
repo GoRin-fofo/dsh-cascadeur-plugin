@@ -37,11 +37,7 @@ $dest = "<Cascadeur安装目录>\resources\scripts\python\scripts\mcp"
 Copy-Item .\autostart.py $dest
 ```
 
-例如本机：
-
-```powershell
-Copy-Item .\autostart.py "D:\cascadeur\resources\scripts\python\scripts\mcp\"
-```
+其中 `<Cascadeur安装目录>` 换成你自己的安装路径（例如 `D:\Apps\Cascadeur`）。
 
 然后**重启 Cascadeur**。约 60 秒后（等场景加载完）看日志：
 

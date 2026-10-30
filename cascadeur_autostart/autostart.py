@@ -14,7 +14,7 @@
     或直接删除本文件。
 
 卸载：
-    del "D:\\cascadeur\\resources\\scripts\\python\\scripts\\mcp\\autostart.py"
+    del "<Cascadeur安装目录>\\resources\\scripts\\python\\scripts\\mcp\\autostart.py"
 
 日志：
     %TEMP%\\dsh_mcp_autostart.log
