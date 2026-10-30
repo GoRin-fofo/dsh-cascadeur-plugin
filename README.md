@@ -17,11 +17,11 @@ reduction (angle + position thresholds, Bezier `AUTO_CLAMPED`), Mocap single-fra
 glitch repair, and unit tests (`npm test`, `python tests/*.py`).
 
 <p align="center">
-  <img src="docs/demo.gif" width="800" alt="Cascadeur .casc → Blender 重建 → FBX（612 帧击剑 Mocap）">
+  <img src="docs/demo.gif" width="1000" alt="Cascadeur .casc → Blender 重建 → FBX（612 帧击剑 Mocap）">
 </p>
 
 <p align="center">
-  <sub>上：Cascadeur 播放 <code>.casc</code>（右侧小窗是驱动它的参考视频）　·　下：Blender 里重建后的 <code>.blend</code> / 导出的 <code>.fbx</code></sub><br>
+  <sub>左：Cascadeur 播放 <code>.casc</code>（小窗是驱动它的参考视频）　·　右：Blender 里重建后的 <code>.blend</code> / 导出的 <code>.fbx</code></sub><br>
   <sub>同一段 612 帧击剑 Mocap，逐帧同步。完整 30 fps 版：<a href="docs/demo.mp4">docs/demo.mp4</a></sub>
 </p>
 
