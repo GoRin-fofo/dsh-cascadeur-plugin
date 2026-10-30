@@ -36,10 +36,27 @@ dsh plugin --profile web add dsh-cascadeur-plugin
 
 | Item | Requirement |
 |---|---|
-| Cascadeur | Any version (Free included); its script server must be running (automatable, see below) |
-| Blender | 5.x (its Python must ship `zstandard`; 5.4 bundles it) |
+| Cascadeur | 2026.2.3 tested (Free included); other versions unverified — see [Tested environment](#tested-environment). Its script server must be running (automatable, see below) |
+| Blender | 5.4 tested; other 5.x builds are expected to work but unverified (its Python must ship `zstandard`) |
 | Original model FBX | The very FBX that was imported into Cascadeur (**not a modified copy**) |
 | DSH | 0.1.7+ |
+
+### Tested environment
+
+This is the combination the whole pipeline was actually run against. Other versions are
+likely to work but have **not been verified** — if you hit a problem on a different
+version, open an issue with your versions and we will add it to this table.
+
+| Component | Tested | Notes |
+|---|---|---|
+| OS | Windows 11 (10.0.26200) | development machine; macOS and Linux are untested |
+| Cascadeur | 2026.2.3 (Free) | MCP script server on `127.0.0.1:8765` |
+| Blender | 5.4 (5.4.0 Alpha, 2026-10-17) | bundled Python 3.13 with `numpy` + `zstandard`; other 5.x builds expected to work |
+| DSH | host API `dsh-tools@0.2.1-rc.5` (`engines.dsh >= 0.1.7`) | verified by loading the plugin in a desktop profile |
+| Node.js | 24.21.0 (dev) / 20 and 24 (CI) | `engines.node >= 20` |
+
+> The 612-frame fencing Mocap behind the numbers in this README was captured with
+> Cascadeur 2026.2.3 on the same machine.
 
 ### Starting the Cascadeur script server
 
@@ -336,6 +353,7 @@ CI: `.github/workflows/ci.yml` (Windows runner) runs the three suites above plus
 
 ## 10. Limitations
 
+- Windows 11 is the tested platform; macOS and Linux are untested.
 - **Not** cross-machine: it reads live data from Cascadeur on the same machine.
 - With several characters in one `.casc`, all skinned meshes are exported (`lod` only affects
   meshes whose names carry a LOD suffix; prop meshes are always kept; `MeshObject(N)`

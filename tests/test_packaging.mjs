@@ -69,6 +69,9 @@ for (const f of ['README.md', 'README.zh-CN.md']) {
   check(`${f} 含 npm 安装命令`, t.includes('dsh plugin --profile web add dsh-cascadeur-plugin'))
   check(`${f} 的演示图用绝对地址（npm 也能显示）`,
     t.includes('raw.githubusercontent.com/GoRin-fofo/dsh-cascadeur-plugin/main/docs/demo.gif'))
+  check(`${f} 有实测环境表（不要写"任意版本"这种无法验证的宣称）`,
+    /Tested environment|实测环境/.test(t) && t.includes('Windows 11'))
+  check(`${f} 不再声称任意 Cascadeur 版本`, !/Any version|任意版本/.test(t))
 }
 
 console.log('\n[7] 版本三方一致（package.json = CHANGELOG 顶部 = 待打 tag）')

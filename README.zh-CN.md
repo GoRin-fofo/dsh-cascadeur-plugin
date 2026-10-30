@@ -41,10 +41,25 @@ glitch repair, and unit tests (`npm test`, `python tests/*.py`).
 
 | 项 | 要求 |
 |---|---|
-| Cascadeur | 任意版本（含免费版）；需要开脚本服务器（可自动化，见下） |
-| Blender | 5.x（Python 需带 `zstandard`；5.4 已自带） |
+| Cascadeur | 2026.2.3 实测通过（含免费版）；其他版本未验证——见下方[实测环境](#实测环境)。需要开脚本服务器（可自动化，见下） |
+| Blender | 5.4 实测通过；其他 5.x 预期可用但未验证（Python 需带 `zstandard`） |
 | 原版模型 FBX | 当初导入 Cascadeur 用的那个 FBX（**不要用改过的**） |
 | DSH | 0.1.7+ |
+
+### 实测环境
+
+下表是完整链路**实际跑过**的组合。其他版本大概率也能用，但**没有验证过**——如果在别的
+版本上遇到问题，带上版本信息开 issue，我们会补进这张表。
+
+| 组件 | 实测版本 | 备注 |
+|---|---|---|
+| 操作系统 | Windows 11（10.0.26200） | 开发机；macOS / Linux 未验证 |
+| Cascadeur | 2026.2.3（Free 版） | MCP 脚本服务器 `127.0.0.1:8765` |
+| Blender | 5.4（5.4.0 Alpha，2026-10-17） | 自带 Python 3.13，含 `numpy` + `zstandard`；其他 5.x 预期可用 |
+| DSH | 宿主 API `dsh-tools@0.2.1-rc.5`（`engines.dsh >= 0.1.7`） | 在桌面 profile 里实际加载验证 |
+| Node.js | 24.21.0（开发机）/ 20 与 24（CI） | `engines.node >= 20` |
+
+> README 里 612 帧击剑 Mocap 的数据，就是在上面这套环境下跑出来的。
 
 ### 开 Cascadeur 脚本服务器
 
@@ -336,6 +351,7 @@ CI：`.github/workflows/ci.yml`（Windows runner）跑上面三套测试 + 全�
 
 ## 十、限制
 
+- Windows 11 是实测平台；macOS / Linux 尚未验证
 - **不**跨机器：读的是本机 Cascadeur 的实时数据
 - 一个 `.casc` 里多个角色时，当前导出所有蒙皮网格（`lod` 只影响带 LOD 后缀的网格，
   道具网格始终保留；`MeshObject(N)` 且 ≤4 顶点的参考视频平面会被自动跳过）
