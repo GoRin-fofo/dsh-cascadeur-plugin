@@ -1,5 +1,23 @@
 # 变更记录
 
+## v0.4.3 — 2026-10-31
+
+修一个会让插件在 DSH 桌面端显示「异常」的注册错误。
+
+### 修复
+
+- `casc_config` 的 `set` 参数是 `object` 类型，但没有显式声明 `additionalProperties`。
+  DSH 宿主校验工具 schema 时抛 `JsonSchemaError: parameters.set.additionalProperties
+  must be explicitly true or false`，整个插件注册失败，桌面端「插件」页因此显示「异常」
+- 现在显式声明 `additionalProperties: true`（`casc_config({ set: {...} })` 里的键是自由格式）
+
+### 测试
+
+- `tests/test_core.mjs` 新增 [9] schema 兼容检查：所有 `type: 'object'` 必须声明
+  `additionalProperties`，防止同类问题再次漏过
+
+---
+
 ## v0.4.2 — 2026-10-30
 
 文档与隐私清理；第一个经 GitHub Actions + OIDC 可信发布（带 npm provenance）的版本。

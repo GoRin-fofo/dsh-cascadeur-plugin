@@ -99,6 +99,16 @@ for (const need of ['lib', 'runtime', 'cascadeur_autostart', 'README.md', 'CHANG
 }
 check('有 repository 字段', !!pkg.repository?.url)
 
+console.log('\n[9] 工具 JSON schema 与宿主兼容')
+// DSH 宿主要求 object 类型的 schema 显式声明 additionalProperties，
+// 否则 defineTool 注册时抛 JsonSchemaError，插件在桌面端显示「异常」。
+const objectSchemas = (indexSrc.match(/type:\s*'object'/g) || []).length
+const declaredAdditional = (indexSrc.match(/additionalProperties\s*:/g) || []).length
+check('每个 object schema 都声明了 additionalProperties',
+  objectSchemas === declaredAdditional, `object=${objectSchemas} additionalProperties=${declaredAdditional}`)
+check('casc_config.set 是开放对象',
+  /set:\s*\{[^}]*type:\s*'object'[^}]*additionalProperties:\s*true/.test(indexSrc))
+
 console.log('\n' + '='.repeat(60))
 if (fails) {
   console.log(`FAILED: ${fails} 项`)
