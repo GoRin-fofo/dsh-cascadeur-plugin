@@ -26,19 +26,18 @@ pose_bone.matrix = D(t) @ bone.matrix_local
 
 ---
 
-## 2. `.casc` 是 ZIP + Zstandard，且**网格资产有两种格式**
+## 2. 场景文件：只取需要的元数据
 
-| 格式 | 字段 | 出现场合 |
-|---|---|---|
-| 旧 | `mesh`（base64 二进制） | Cascadeur 早期保存 |
-| 新 | `vertices` / `normals` / `texture_coords` / `triangles_vertex_indices` | 新版本或另存后 |
+本项目从场景文件里只取**元数据**（对象名、网格顶点数、时间轴范围、rest 姿势）；
+**动画数据一律走官方 MCP**，不解析动画通道。
 
-**症状：`KeyError: 'mesh'`**
-→ 遇到新版格式或视频对象（没有几何）。代码：`casc_core.parse_meshes`。
+**约定**：
 
-**症状：`zstandard` 解压报错**
-→ 不要吞异常返回原始字节（会静默产出垃圾 JSON）。
-→ 代码：`casc_core.read_casc_entry`，按 method 分派 93/8/0。
+- 只读需要的字段，**不要依赖文件的整体内部布局**；升级后字段可能变，
+  代码要能跳过不认识的结构（症状：`KeyError`、顶点数为 0、网格消失）。
+- 解压 / 反序列化失败必须**抛异常**，不能吞掉返回原始字节（会静默产出垃圾）。
+- 参考视频对象没有几何数据，必须能跳过；道具网格（名字里不带 LOD）必须保留。
+- 文档与注释只描述**行为**（输入什么、输出什么、失败时怎样），不描述内部结构。
 
 ---
 
@@ -57,9 +56,9 @@ pose_bone.matrix = D(t) @ bone.matrix_local
 
 ## 4. 帧范围语义
 
-* `timeline.json` 的 `StartFrame/EndFrame` 是**时间轴范围**，不是"有数据的帧"。
+* 场景时间轴范围（开始/结束帧）**不等于**"有数据的帧"。
 * `layers_viewer().frames_count()` 返回的可能是**有键的帧数**，不等于时间轴长度。
-* 扩展时间轴：改 `.casc` 里的 `Data.EndFrame`（`Mocap` 前常用）。
+* 扩展时间轴按官方方式处理（扩展选区到末端会顺带延长）。
 * **不要**用 `Actions.Timeline.Increase scroll bar max frame`（只滚动，不改长度）。
 * `Timeline.Expand selection left/right` 在时间轴末端会**顺带延长**时间轴。
 
@@ -118,7 +117,7 @@ pose_bone.matrix = D(t) @ bone.matrix_local
 ```bash
 node tests/test_core.mjs          # JS 纯逻辑（28 项）
 python tests/test_keyreduce.py    # 关键帧简化（12 项，--bench 跑真实数据）
-python tests/test_casc_core.py    # .casc 解析（25 项，需要 numpy+zstandard）
+python tests/test_casc_core.py    # 场景元数据读取（25 项，需要 numpy+zstandard）
 ```
 
 带 Blender 的精度验收（需要真实资产，不进 CI）：

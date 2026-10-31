@@ -201,7 +201,7 @@ pose_bone.matrix = D(t) @ bone.matrix_local
 > How to diagnose it:
 >
 > ```
-> rest(statics)   ↔ Blender bind  = ~0°    ← normal
+> rest pose       ↔ Blender bind  = ~0°    ← normal
 > GM(bind frame)  ↔ Blender bind  = 90°    ← B4 is being applied wrong
 > ```
 
@@ -277,14 +277,11 @@ but when reading them back it looks them up by **frame index** (`000001.jpg, 000
 ffmpeg -i original.mp4 -c:v libx264 -crf 16 -r 25 -video_track_timescale 25 -an fixed.mp4
 ```
 
-### Gotcha 2: two storage formats for mesh assets inside `.casc`
+### Gotcha 2: scenes may contain mesh objects without geometry
 
-| Format | Fields | Notes |
-|---|---|---|
-| Old | `mesh` (base64 binary blob) | `[ver][count][16B/vertex][indices]` |
-| New | `vertices` / `normals` / `texture_coords` / `triangles_vertex_indices` | plain arrays |
-
-Both are supported; video objects (no geometry data) are skipped automatically.
+Imported reference-video planes show up as ordinary mesh objects with a handful of vertices
+and no skinning data. The plugin skips them instead of failing, and always exports only the
+meshes that actually carry geometry.
 
 ### Gotcha 3: Mocap is local CPU inference and eats memory
 
@@ -332,7 +329,7 @@ node tests/test_core.mjs          # or npm test
 # Keyframe reduction (12 assertions; --bench runs the real 612-frame data)
 python tests/test_keyreduce.py
 
-# .casc parsing (25 assertions; needs numpy + zstandard, or Blender's bundled Python)
+# scene metadata reading (25 assertions; needs numpy + zstandard, or Blender's bundled Python)
 python tests/test_casc_core.py
 ```
 
@@ -358,7 +355,7 @@ CI: `.github/workflows/ci.yml` (Windows runner) runs the three suites above plus
 - With several characters in one `.casc`, all skinned meshes are exported (`lod` only affects
   meshes whose names carry a LOD suffix; prop meshes are always kept; `MeshObject(N)`
   reference-video planes with ≤ 4 vertices are skipped automatically).
-- Timing assumes 30 fps (Cascadeur's default); non-30 fps scenes are read from `scene_settings.json`.
+- Timing assumes 30 fps (Cascadeur's default); non-30 fps scenes are read from the scene's own settings.
 - No IK re-solve: it uses Cascadeur's evaluated `Global Matrix` as-is (that is exactly why it is accurate).
 - `keyreduce`'s `min_gap` is a hard constraint: setting it too high invalidates the threshold
   promise (the `violations` field in the result reports it honestly).

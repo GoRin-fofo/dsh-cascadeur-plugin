@@ -134,10 +134,10 @@
     `max_err_deg` / `bezier_fcurves`
   - 实测：612 帧 Mocap → 137 帧（22.4%），平均误差 1.58°、最大 3.19°
 
-- **支持两种 `.casc` 网格资产格式**
-  - 旧：base64 二进制 `mesh` blob
-  - 新：明文 `vertices` / `normals` / `texture_coords` / `triangles_vertex_indices`
-  - 视频对象（无几何）自动跳过，不再报 `KeyError: 'mesh'`
+- **场景文件读取更健壮**
+  - 兼容不同版本保存的网格数据变体；参考视频对象（无几何）自动跳过，
+    不再因缺少几何字段而崩溃
+  - 道具网格（名字里不带 LOD）在 `lod=0` 时不再被误删
 
 - **导出 FPS 可配置**（`--fps`），Mocap 视频通常是 25
 

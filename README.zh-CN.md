@@ -84,7 +84,7 @@ Cascadeur 菜单栏 → **Scripts** → **MCP** → **Start script server**
 | 工具 | 用途 |
 |---|---|
 | `casc_status` | 环境自检：Cascadeur 是否可达 / Blender 路径 / 当前设置 |
-| `casc_inspect` | 只读解析 `.casc`：角色、骨骼、帧范围、LOD、分层。**不需要开 Cascadeur** |
+| `casc_inspect` | 只读读取 `.casc` 元数据：角色、骨骼、帧范围、LOD、分层。**不需要开 Cascadeur** |
 | `casc_dump` | 只导出动画数据（Global Matrix → JSON） |
 | `casc2blend` | **一条龙**：读 → 重建 → `.blend`（可开启关键帧简化） |
 | `casc2fbx` | **一条龙**：读 → 重建 → `.fbx`（可直接进 UE5） |
@@ -276,14 +276,10 @@ Cascadeur 抽帧时按**时间码**命名（`000000.jpg, 000512.jpg, 001024.jpg 
 ffmpeg -i 原视频.mp4 -c:v libx264 -crf 16 -r 25 -video_track_timescale 25 -an 修复后.mp4
 ```
 
-### 坑 2：`.casc` 里网格资产的两种存储格式
+### 坑 2：场景里可能有「没有几何数据」的网格对象
 
-| 格式 | 字段 | 说明 |
-|---|---|---|
-| 旧 | `mesh`（base64 二进制 blob） | `[ver][count][16B/顶点][索引]` |
-| 新 | `vertices` / `normals` / `texture_coords` / `triangles_vertex_indices` | 明文数组 |
-
-插件两种都支持；视频对象（没有几何数据）会被自动跳过。
+导入的参考视频会以普通网格对象的形式出现（几个顶点、没有蒙皮）。插件会自动跳过它们，
+只导出真正带几何的网格，而不是直接崩掉。
 
 ### 坑 3：Mocap 是本地 CPU 推理，吃内存
 
@@ -330,7 +326,7 @@ node tests/test_core.mjs          # 或 npm test
 # 关键帧简化（12 项；--bench 可跑真实 612 帧数据）
 python tests/test_keyreduce.py
 
-# .casc 解析（25 项；需要 numpy + zstandard，或用 Blender 自带 Python）
+# 场景元数据读取（25 项；需要 numpy + zstandard，或用 Blender 自带 Python）
 python tests/test_casc_core.py
 ```
 
@@ -355,6 +351,6 @@ CI：`.github/workflows/ci.yml`（Windows runner）跑上面三套测试 + 全�
 - **不**跨机器：读的是本机 Cascadeur 的实时数据
 - 一个 `.casc` 里多个角色时，当前导出所有蒙皮网格（`lod` 只影响带 LOD 后缀的网格，
   道具网格始终保留；`MeshObject(N)` 且 ≤4 顶点的参考视频平面会被自动跳过）
-- 动画节奏按 30fps 假设（Cascadeur 默认）；非 30fps 场景会从 `scene_settings.json` 读取
+- 动画节奏按 30fps 假设（Cascadeur 默认）；非 30fps 场景从场景自身设置读取
 - 不做 IK 重解算：直接使用 Cascadeur 求值后的 `Global Matrix`（这就是精确的原因）
 - `keyreduce` 的 `min_gap` 是硬约束：设得过大会让阈值承诺失效（回执里 `violations` 会如实报告）
