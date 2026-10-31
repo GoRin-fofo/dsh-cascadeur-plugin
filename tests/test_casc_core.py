@@ -32,7 +32,7 @@ def check(name, cond, detail=""):
 
 
 def test_zip_and_json():
-    print("\n[1] ZIP(method 93) 解包 + JSON 解析")
+    print("\n[1] 容器解包 + JSON 解析")
     tmp = tempfile.mkdtemp(prefix="casc_test_")
     p = make_fixture.build(os.path.join(tmp, "mini.casc"))
     check("固件已生成", os.path.exists(p) and os.path.getsize(p) > 100,
@@ -74,9 +74,9 @@ def test_error_paths():
         f.write(name)
         f.write(b"garbage-not-zstd")
         cd = b"PK\x01\x02" + b"\x00" * 10 + b"\x5d\x00" + b"\x00" * 8 + b"\x00" * 4
-        # 直接用真实写盘函数构造一个 method=93 但内容非法的条目
+        # 用真实写盘函数构造一个打包内容非法的条目
     try:
-        make_fixture.write_zip93(p, [("scene/scene.json", b"{}")])
+        make_fixture.write_packed_zip(p, [("scene/scene.json", b"{}")])
         # 把压缩内容替换成垃圾
         data = bytearray(open(p, "rb").read())
         i = data.find(b"scene/scene.json") + len(b"scene/scene.json")

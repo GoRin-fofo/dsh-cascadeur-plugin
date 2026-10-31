@@ -6,7 +6,7 @@
   scene/timeline/timeline.json
   scene/scene_settings.json
 
-条目用 Zstandard(method 93) 压缩，和真实 .casc 一致，从而覆盖真实解包路径。
+条目按与真实文件一致的打包方式写入，从而覆盖真实解包路径。
 """
 import io
 import json
@@ -97,8 +97,8 @@ def _zstd(data):
     return zstandard.ZstdCompressor(level=3).compress(data)
 
 
-def write_zip93(path, entries):
-    """手写 ZIP，条目用 method 93（Zstandard）。"""
+def write_packed_zip(path, entries):
+    """按真实文件使用的打包方式手写 ZIP。"""
     out = io.BytesIO()
     central = io.BytesIO()
     for name, raw in entries:
@@ -132,7 +132,7 @@ def build(path):
         ("scene/timeline/timeline.json", json.dumps(timeline_json()).encode("utf-8")),
         ("scene/scene_settings.json", json.dumps(settings_json()).encode("utf-8")),
     ]
-    write_zip93(path, entries)
+    write_packed_zip(path, entries)
     return path
 
 

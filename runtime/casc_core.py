@@ -6,7 +6,7 @@
     D = A @ inv(W_rest)
     pose_bone.matrix = D @ bone.matrix_local
 
-W_rest 来自 .casc 的 statics（model pose，Z-up，欧拉 ZYX），不做任何转换。
+W_rest 来自场景的 model pose（Z-up，欧拉 ZYX），不做任何转换。
 """
 import json
 import struct
@@ -22,7 +22,7 @@ B4 = np.array([[1, 0, 0, 0],
 
 # ────────────────────────────── .casc 解包 ──────────────────────────────
 def read_casc_entry(casc_path, want_name):
-    """从 .casc（ZIP；条目通常是 Zstandard method 93）里取出一个文件并解压。"""
+    """从 .casc 里取出一个文件并解压（按条目声明的压缩方式分派）。"""
     buf = open(casc_path, "rb").read()
     eocd = buf.rfind(b"PK\x05\x06")
     if eocd < 0:
@@ -48,7 +48,7 @@ def read_casc_entry(casc_path, want_name):
                 return zlib.decompress(comp, -15)
             if method != 93:                      # 93 = Zstandard
                 raise RuntimeError(
-                    "条目 %r 使用了不支持的压缩方法 %d（期望 93=Zstandard / 8=deflate / 0=stored）"
+                    "条目 %r 使用了不支持的压缩方式（%d）"
                     % (want_name, method))
             try:
                 return zstandard.ZstdDecompressor().decompress(comp, max_output_size=usize + 1024)
@@ -136,7 +136,7 @@ def compose_rest_world(arm, model):
 
 # ────────────────────────────── 蒙皮网格 ──────────────────────────────
 def parse_meshes(scene_json):
-    """解析 assets 里的 mesh / mesh_dependency / materials_link。
+    """解析场景里的网格对象（顶点数、蒙皮骨数、可选的顶点/权重数据）。
 
     返回 [{id, name(若可推断), verts, tris, joints(linked_objects 名字), weights}]
     """
@@ -154,7 +154,7 @@ def parse_meshes(scene_json):
             continue
         mesh_asset = assets.get((beh.get("mesh") or "").strip()) if beh.get("mesh") else None
         dep_asset = assets.get(beh.get("mesh_dependency"))
-        # 视频对象等没有几何数据；两种存储格式：旧 = base64 "mesh"，新 = 明文 "vertices"
+        # 没有几何数据的对象（例如参考视频）直接跳过
         if mesh_asset is None or ("mesh" not in mesh_asset and "vertices" not in mesh_asset):
             continue
         info = {
@@ -168,7 +168,7 @@ def parse_meshes(scene_json):
             "weights": None,
         }
         if "mesh" in mesh_asset:
-            # ── 旧格式：base64 二进制块 ──
+            # ── 变体 A ──
             raw = base64.b64decode(mesh_asset["mesh"])
             ver, count = struct.unpack_from("<II", raw, 0)
             info["verts"] = count
@@ -178,7 +178,7 @@ def parse_meshes(scene_json):
             info["verts_data"] = np.frombuffer(raw, dtype=np.float32, count=count * 4, offset=8) \
                 .reshape(count, 4)[:, 1:4].astype(np.float64)
         else:
-            # ── 新格式：明文数组 ──
+            # ── 变体 B ──
             def _num(x):
                 while isinstance(x, list):
                     if not x:
